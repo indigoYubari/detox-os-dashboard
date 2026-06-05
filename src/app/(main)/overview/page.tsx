@@ -301,7 +301,7 @@ export default function Overview() {
                 data={trendData}
                 index="date"
                 categories={["Google Ads", "Klaviyo"]}
-                colors={["blue", "yellow"]}
+                colors={["blue", "amber"]}
                 valueFormatter={(v) => `${v.toFixed(2)}x`}
                 showTooltip={false}
                 className="h-52"
