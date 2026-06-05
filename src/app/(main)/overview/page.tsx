@@ -109,7 +109,7 @@ export default function Overview() {
     ["google_ads", "meta", "klaviyo"].includes(c.channel),
   ) ?? []
   const totalRevenue = shopify?.revenue ?? 0
-  const totalSpend = metrics?.totals?.spend ?? 0
+  const totalSpend = metrics?.totals?.adSpend ?? 0
   const overallRoas = totalSpend > 0 ? totalRevenue / totalSpend : 0
 
   const topRecs = [
@@ -185,17 +185,17 @@ export default function Overview() {
             <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-50">
               {loading ? "…" : kr(totalRevenue)}
             </p>
-            {metrics?.comparison?.totals?.revenue && (
+            {metrics?.comparison?.totals?.shopifyRevenue && (
               <p
                 className={`mt-1 text-xs ${
-                  metrics.comparison.totals.revenue.dir === "up"
+                  metrics.comparison.totals.shopifyRevenue.dir === "up"
                     ? "text-green-600"
                     : "text-red-500"
                 }`}
               >
                 {pctLabel(
-                  metrics.comparison.totals.revenue.pct,
-                  metrics.comparison.totals.revenue.dir,
+                  metrics.comparison.totals.shopifyRevenue.pct,
+                  metrics.comparison.totals.shopifyRevenue.dir,
                 )}{" "}
                 vs forrige periode
               </p>
@@ -207,11 +207,11 @@ export default function Overview() {
             <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-50">
               {loading ? "…" : kr(totalSpend)}
             </p>
-            {metrics?.comparison?.totals?.spend && (
+            {metrics?.comparison?.totals?.adSpend && (
               <p className="mt-1 text-xs text-gray-400">
                 {pctLabel(
-                  metrics.comparison.totals.spend.pct,
-                  metrics.comparison.totals.spend.dir,
+                  metrics.comparison.totals.adSpend.pct,
+                  metrics.comparison.totals.adSpend.dir,
                 )}{" "}
                 vs forrige periode
               </p>

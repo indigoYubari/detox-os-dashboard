@@ -21,13 +21,13 @@ export type MetricsResponse = {
   previousRange?: { since: string; until: string }
   lastSync: string
   channels: ChannelMetrics[]
-  totals: { spend: number; revenue: number; orders?: number }
+  totals: { adSpend: number; shopifyRevenue: number; shopifyOrders?: number }
   segments?: { name: string; spend: number; revenue: number; roas: number }[]
   comparison?: {
     totals: {
-      spend: DeltaValue
-      revenue: DeltaValue
-      roas: DeltaValue
+      adSpend: DeltaValue
+      shopifyRevenue: DeltaValue
+      shopifyOrders: DeltaValue
     }
     channels: Record<string, {
       spend: DeltaValue
