@@ -1,7 +1,7 @@
 import { Badge } from "@/components/Badge"
 import { cx } from "@/lib/utils"
 
-import type { KpiEntryExtended } from "@/app/(main)/overview/page"
+type KpiEntryExtended = { title: string; percentage: number; current: number; allowed: number; unit?: string }
 
 export type CardProps = {
   title: string
