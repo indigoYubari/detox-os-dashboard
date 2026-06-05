@@ -1,15 +1,22 @@
 export const siteConfig = {
-  name: "Dashboard",
-  url: "https://dashboard.tremor.so",
-  description: "The only dashboard you will ever need.",
+  name: "detox.OS",
+  url: "https://os.detox.no",
+  description: "Operator-OS for detox.no",
   baseLinks: {
     home: "/",
     overview: "/overview",
-    details: "/details",
-    settings: "/settings",
-  },
-  externalLink: {
-    blocks: "https://blocks.tremor.so/templates#dashboard",
+    annonser: "/annonser",
+    annonserKanaler: "/annonser/kanaler",
+    annonserKampanjer: "/annonser/kampanjer",
+    annonserSoketermer: "/annonser/soketermer",
+    annonserAnbefalinger: "/annonser/anbefalinger",
+    annonserTrafikksegment: "/annonser/trafikksegment",
+    butikk: "/butikk",
+    quiz: "/quiz",
+    aiVerktoy: "/ai-verktoy",
+    claude: "/claude",
+    okonomi: "/okonomi",
+    innstillinger: "/innstillinger",
   },
 }
 
