@@ -31,7 +31,7 @@ import {
   TrendResponse,
 } from "@/lib/detox-api"
 
-// ââ helpers ââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── helpers ──────────────────────────────────────────────────
 function kr(n: number) {
   return `kr ${Math.round(n).toLocaleString("nb-NO")}`
 }
@@ -40,11 +40,11 @@ function roasLabel(n: number) {
 }
 function pctLabel(pct: number | null, dir: string) {
   if (pct == null) return null
-  const sign = dir === "up" ? "â" : dir === "down" ? "â" : "â"
+  const sign = dir === "up" ? "↑" : dir === "down" ? "↓" : "→"
   return `${sign} ${Math.abs(pct).toFixed(1)}%`
 }
 
-// ââ constants âââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── constants ─────────────────────────────────────────────────
 const LABELS: Record<string, string> = {
   google_ads: "Google Ads",
   meta: "Meta",
@@ -68,7 +68,7 @@ const SEV_BADGE: Record<string, string> = {
   info: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
 }
 
-// ââ component âââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── component ─────────────────────────────────────────────────
 export default function Overview() {
   const today = new Date()
   const [selectedDates, setSelectedDates] = React.useState<DateRange | undefined>({
@@ -103,7 +103,7 @@ export default function Overview() {
       })
   }, [selectedDates])
 
-  // ââ derived ââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ── derived ──────────────────────────────────────────────────
   const shopify = metrics?.channels.find((c) => c.channel === "shopify")
   const adChannels = metrics?.channels.filter((c) =>
     ["google_ads", "meta", "klaviyo"].includes(c.channel),
@@ -145,11 +145,11 @@ export default function Overview() {
 
   return (
     <>
-      {/* ââ Header ââ */}
+      {/* ── Header ── */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-semibold text-gray-900 sm:text-xl dark:text-gray-50">
-            detox.OS â Oversikt
+            detox.OS — Oversikt
           </h1>
           {metrics?.lastSync && (
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -177,13 +177,13 @@ export default function Overview() {
         </div>
       )}
 
-      {/* ââ KPI Summary ââ */}
+      {/* ── KPI Summary ── */}
       <section className="mt-8">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
             <p className="text-sm text-gray-500 dark:text-gray-400">Omsetning (Shopify)</p>
             <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-50">
-              {loading ? "â¦" : kr(totalRevenue)}
+              {loading ? "…" : kr(totalRevenue)}
             </p>
             {metrics?.comparison?.totals?.revenue && (
               <p
@@ -205,7 +205,7 @@ export default function Overview() {
           <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
             <p className="text-sm text-gray-500 dark:text-gray-400">Total annonsespend</p>
             <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-50">
-              {loading ? "â¦" : kr(totalSpend)}
+              {loading ? "…" : kr(totalSpend)}
             </p>
             {metrics?.comparison?.totals?.spend && (
               <p className="mt-1 text-xs text-gray-400">
@@ -221,19 +221,19 @@ export default function Overview() {
           <div className={`rounded-lg border p-6 ${roasCardColor}`}>
             <p className="text-sm text-gray-600 dark:text-gray-400">Validert ROAS</p>
             <p className={`mt-2 text-2xl font-semibold ${roasTextColor}`}>
-              {loading ? "â¦" : roasLabel(overallRoas)}
+              {loading ? "…" : roasLabel(overallRoas)}
             </p>
-            <p className="mt-1 text-xs text-gray-500">Shopify-attribuert Ã· ad-spend</p>
+            <p className="mt-1 text-xs text-gray-500">Shopify-attribuert ÷ ad-spend</p>
           </div>
         </div>
       </section>
 
-      {/* ââ Channel Cards ââ */}
+      {/* ── Channel Cards ── */}
       <section className="mt-10">
         <h2 className="text-base font-semibold text-gray-900 dark:text-gray-50">Kanaler</h2>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {loading ? (
-            <p className="text-sm text-gray-400">Laster kanaldataâ¦</p>
+            <p className="text-sm text-gray-400">Laster kanaldata…</p>
           ) : (
             adChannels.map((ch) => {
               const channelRoas = ch.spend > 0 ? ch.revenue / ch.spend : 0
@@ -306,7 +306,7 @@ export default function Overview() {
         </div>
       </section>
 
-      {/* ââ ROAS Trend + Recommendations ââ */}
+      {/* ── ROAS Trend + Recommendations ── */}
       <div className="mt-10 grid grid-cols-1 gap-8 xl:grid-cols-2">
         <section>
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-50">
@@ -325,7 +325,7 @@ export default function Overview() {
               />
             ) : (
               <p className="py-16 text-center text-sm text-gray-400">
-                {loading ? "Lasterâ¦" : "Ingen trenddata"}
+                {loading ? "Laster…" : "Ingen trenddata"}
               </p>
             )}
           </div>
@@ -337,16 +337,16 @@ export default function Overview() {
               Anbefalinger
             </h2>
             {recs && (
-              <span className="text-sm text-gray-500">{recs.counts.total} Ã¥pne</span>
+              <span className="text-sm text-gray-500">{recs.counts.total} åpne</span>
             )}
           </div>
           <div className="mt-4 space-y-3">
             {loading ? (
-              <p className="text-sm text-gray-400">Lasterâ¦</p>
+              <p className="text-sm text-gray-400">Laster…</p>
             ) : topRecs.length === 0 ? (
               <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
                 <p className="text-sm text-green-700 dark:text-green-300">
-                  Ingen kritiske anbefalinger akkurat nÃ¥.
+                  Ingen kritiske anbefalinger akkurat nå.
                 </p>
               </div>
             ) : (
