@@ -1,4 +1,11 @@
 "use client"
+export type KpiEntryExtended = {
+  title: string
+  percentage: number
+  current: number
+  allowed: number
+  unit?: string
+}
 
 import React from "react"
 import { subDays, format } from "date-fns"
