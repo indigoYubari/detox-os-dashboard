@@ -44,11 +44,18 @@ export type Recommendation = {
   type: string
   severity: 'critical' | 'warning' | 'info'
   title: string
-  description: string
+  description: string | null
   status: string
   created_at: string
   rationale?: Record<string, unknown>
 }
+
+export type RecommendationStatus =
+  | "open"
+  | "applied"
+  | "dismissed"
+  | "resolved"
+  | "all"
 
 export type RecommendationsResponse = {
   recommendations: Recommendation[]
@@ -81,8 +88,20 @@ export async function getMetrics(since?: string, until?: string): Promise<Metric
   return res.json()
 }
 
-export async function getRecommendations(limit = 5): Promise<RecommendationsResponse> {
-  const res = await fetch(`${BASE}/recommendations?status=open&limit=${limit}`, { cache: 'no-store' })
+export async function getRecommendations(
+  params: {
+    status?: RecommendationStatus
+    channel?: string
+    type?: string
+    limit?: number
+  } = {},
+): Promise<RecommendationsResponse> {
+  const qs = new URLSearchParams()
+  qs.set('status', params.status ?? 'open')
+  if (params.channel) qs.set('channel', params.channel)
+  if (params.type) qs.set('type', params.type)
+  qs.set('limit', String(params.limit ?? 100))
+  const res = await fetch(`${BASE}/recommendations?${qs}`, { cache: 'no-store' })
   if (!res.ok) throw new Error(`Anbefalinger feilet: ${res.status}`)
   return res.json()
 }

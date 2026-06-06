@@ -88,7 +88,7 @@ export default function Overview() {
     setError(null)
     Promise.all([
       getMetrics(since, until),
-      getRecommendations(5),
+      getRecommendations({ limit: 5 }),
       getTrend(since, until),
     ])
       .then(([m, r, t]) => {
