@@ -89,6 +89,7 @@ type Kpi = {
   delta?: DeltaValue | null
   tone?: "good-up" | "neutral"
   valueClassName?: string
+  caption?: string
 }
 
 // Build the five headline numbers, deriving AOV/ROAS trends from the
@@ -133,7 +134,8 @@ function buildKpis(metrics: MetricsResponse): Kpi[] {
       tone: "neutral",
     },
     {
-      label: "Validert ROAS",
+      label: "Blended ROAS",
+      caption: "MER · Shopify-omsetning ÷ totalt annonseforbruk",
       value: roasLabel(roas),
       delta: roasDelta,
       valueClassName: roasTone(roas),
@@ -231,6 +233,7 @@ export default function IDagPage() {
                   delta={k.delta}
                   tone={k.tone}
                   valueClassName={k.valueClassName}
+                  caption={k.caption}
                 />
               ))}
         </div>

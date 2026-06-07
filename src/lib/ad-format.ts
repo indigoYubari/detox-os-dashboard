@@ -76,7 +76,13 @@ export function deltaClass(dir: string): string {
       : "text-gray-400"
 }
 
-// Validated ROAS = Shopify-attributed revenue ÷ ad spend.
+// revenue ÷ spend. What the result *means* depends entirely on what is fed in:
+//   • Fed account totals (totals.shopifyRevenue, totals.adSpend) → blended MER,
+//     genuinely Shopify-validated (the headline "Blended ROAS").
+//   • Fed a single channel's own revenue/spend → PLATFORM ROAS, where revenue is
+//     that platform's self-reported conversion value (Google conversions_value,
+//     Meta action_values, Klaviyo conversion_value) — NOT Shopify-attributed.
+//     This is the per-channel "Plattform-ROAS" behind the briefing health dots.
 export function validatedRoas(spend: number, revenue: number): number | null {
   return spend > 0 ? revenue / spend : null
 }
@@ -199,7 +205,7 @@ type ChannelComparison = {
 }
 
 const CHANNEL_METRIC_SPECS: Record<keyof ChannelComparison, MetricSpec> = {
-  roas: { label: "Validert ROAS", upIsGood: true },
+  roas: { label: "Plattform-ROAS", upIsGood: true },
   revenue: { label: "Omsetning", upIsGood: true },
   spend: { label: "Forbruk", upIsGood: false },
   conversions: { label: "Konverteringer", upIsGood: true },

@@ -10,6 +10,8 @@ interface KpiCardProps {
   tone?: DeltaTone
   /** Optional colour override for the value itself (used for ROAS bands). */
   valueClassName?: string
+  /** Optional muted line spelling out how the number is derived. */
+  caption?: string
 }
 
 /**
@@ -22,6 +24,7 @@ export function KpiCard({
   delta,
   tone = "good-up",
   valueClassName,
+  caption,
 }: KpiCardProps) {
   // A bare arrow with no percentage is noise — only show a trend when there is
   // a real period-over-period change to report.
@@ -48,6 +51,11 @@ export function KpiCard({
       >
         {showDelta ? deltaLabel(delta) : "—"}
       </p>
+      {caption && (
+        <p className="mt-1 text-[11px] leading-tight text-gray-400 dark:text-gray-500">
+          {caption}
+        </p>
+      )}
     </div>
   )
 }

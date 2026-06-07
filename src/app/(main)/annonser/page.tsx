@@ -187,6 +187,11 @@ export default function AnnonserBriefing() {
       {/* ── Section 1 — Helse per kanal ─────────────────────── */}
       <section className="mt-8">
         <SectionHeading icon={RiPulseLine} title="Helse per kanal" />
+        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+          Plattform-rapporterte tall (retningsgivende) — pålitelig
+          Shopify-validert ROAS per kanal er ikke tilgjengelig ennå
+          (attribusjonsarbeid gjenstår).
+        </p>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           {loading
             ? AD_CHANNELS.map((id) => <ChannelHealthSkeleton key={id} />)
@@ -399,7 +404,7 @@ function ChannelHealthCard({
       <div className="mt-4 flex items-end justify-between">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-            Validert ROAS
+            Plattform-ROAS
           </p>
           <p
             className={cx(

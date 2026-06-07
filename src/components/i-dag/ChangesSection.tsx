@@ -56,7 +56,7 @@ function buildChanges(metrics: MetricsResponse): Change[] {
     const roasDelta = makeDelta(revenue / spend, prevRevenue / prevSpend)
     candidates.push({
       key: "roas",
-      noun: "Validert ROAS",
+      noun: "Blended ROAS",
       delta: roasDelta,
       tone: "good-up",
     })

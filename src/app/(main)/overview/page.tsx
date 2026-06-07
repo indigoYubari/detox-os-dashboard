@@ -59,19 +59,23 @@ const DOT_COLORS: Record<string, string> = {
 }
 const SEV_CLASSES: Record<string, string> = {
   critical: "border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950",
-  warning: "border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950",
+  warning:
+    "border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950",
   info: "border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950",
 }
 const SEV_BADGE: Record<string, string> = {
   critical: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-  warning: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
+  warning:
+    "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
   info: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
 }
 
 // ── component ─────────────────────────────────────────────────
 export default function Overview() {
   const today = new Date()
-  const [selectedDates, setSelectedDates] = React.useState<DateRange | undefined>({
+  const [selectedDates, setSelectedDates] = React.useState<
+    DateRange | undefined
+  >({
     from: subDays(today, 30),
     to: today,
   })
@@ -82,8 +86,12 @@ export default function Overview() {
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    const since = selectedDates?.from ? format(selectedDates.from, "yyyy-MM-dd") : undefined
-    const until = selectedDates?.to ? format(selectedDates.to, "yyyy-MM-dd") : undefined
+    const since = selectedDates?.from
+      ? format(selectedDates.from, "yyyy-MM-dd")
+      : undefined
+    const until = selectedDates?.to
+      ? format(selectedDates.to, "yyyy-MM-dd")
+      : undefined
     setLoading(true)
     setError(null)
     Promise.all([
@@ -105,9 +113,10 @@ export default function Overview() {
 
   // ── derived ──────────────────────────────────────────────────
   const shopify = metrics?.channels.find((c) => c.channel === "shopify")
-  const adChannels = metrics?.channels.filter((c) =>
-    ["google_ads", "meta", "klaviyo"].includes(c.channel),
-  ) ?? []
+  const adChannels =
+    metrics?.channels.filter((c) =>
+      ["google_ads", "meta", "klaviyo"].includes(c.channel),
+    ) ?? []
   const totalRevenue = shopify?.revenue ?? 0
   const totalSpend = metrics?.totals?.adSpend ?? 0
   const overallRoas = totalSpend > 0 ? totalRevenue / totalSpend : 0
@@ -122,12 +131,20 @@ export default function Overview() {
       date: pt.date?.substring(5) ?? "",
       title: pt.date ?? "",
       formattedDate: pt.date
-        ? new Date(pt.date).toLocaleDateString("nb-NO", { day: "numeric", month: "short" })
+        ? new Date(pt.date).toLocaleDateString("nb-NO", {
+            day: "numeric",
+            month: "short",
+          })
         : "",
       previousFormattedDate: "",
       "Google Ads":
-        typeof pt.google_ads_roas === "number" ? +pt.google_ads_roas.toFixed(2) : null,
-      Klaviyo: typeof pt.klaviyo_roas === "number" ? +pt.klaviyo_roas.toFixed(2) : null,
+        typeof pt.google_ads_roas === "number"
+          ? +pt.google_ads_roas.toFixed(2)
+          : null,
+      Klaviyo:
+        typeof pt.klaviyo_roas === "number"
+          ? +pt.klaviyo_roas.toFixed(2)
+          : null,
     })) ?? []
 
   const roasCardColor =
@@ -181,7 +198,9 @@ export default function Overview() {
       <section className="mt-8">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Omsetning (Shopify)</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Omsetning (Shopify)
+            </p>
             <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-50">
               {loading ? "…" : kr(totalRevenue)}
             </p>
@@ -203,7 +222,9 @@ export default function Overview() {
           </div>
 
           <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Total annonsespend</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Total annonsespend
+            </p>
             <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-50">
               {loading ? "…" : kr(totalSpend)}
             </p>
@@ -219,18 +240,24 @@ export default function Overview() {
           </div>
 
           <div className={`rounded-lg border p-6 ${roasCardColor}`}>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Validert ROAS</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Blended ROAS
+            </p>
             <p className={`mt-2 text-2xl font-semibold ${roasTextColor}`}>
               {loading ? "…" : roasLabel(overallRoas)}
             </p>
-            <p className="mt-1 text-xs text-gray-500">Shopify-attribuert ÷ ad-spend</p>
+            <p className="mt-1 text-xs text-gray-500">
+              MER · Shopify-omsetning ÷ totalt annonseforbruk
+            </p>
           </div>
         </div>
       </section>
 
       {/* ── Channel Cards ── */}
       <section className="mt-10">
-        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-50">Kanaler</h2>
+        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-50">
+          Kanaler
+        </h2>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {loading ? (
             <p className="text-sm text-gray-400">Laster kanaldata…</p>
@@ -271,7 +298,9 @@ export default function Overview() {
                       {chComp?.revenue && (
                         <p
                           className={`text-xs ${
-                            chComp.revenue.dir === "up" ? "text-green-600" : "text-red-500"
+                            chComp.revenue.dir === "up"
+                              ? "text-green-600"
+                              : "text-red-500"
                           }`}
                         >
                           {pctLabel(chComp.revenue.pct, chComp.revenue.dir)}
@@ -337,7 +366,9 @@ export default function Overview() {
               Anbefalinger
             </h2>
             {recs && (
-              <span className="text-sm text-gray-500">{recs.counts.total} åpne</span>
+              <span className="text-sm text-gray-500">
+                {recs.counts.total} åpne
+              </span>
             )}
           </div>
           <div className="mt-4 space-y-3">
