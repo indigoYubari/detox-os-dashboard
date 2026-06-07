@@ -1,9 +1,9 @@
-export type Channel = 'google_ads' | 'meta' | 'shopify' | 'klaviyo'
+export type Channel = "google_ads" | "meta" | "shopify" | "klaviyo"
 
 export type DeltaValue = {
   abs: number
   pct: number | null
-  dir: 'up' | 'down' | 'flat'
+  dir: "up" | "down" | "flat"
 }
 
 export type ChannelTypeBreakdown = {
@@ -39,12 +39,15 @@ export type MetricsResponse = {
       shopifyRevenue: DeltaValue
       shopifyOrders: DeltaValue
     }
-    channels: Record<string, {
-      spend: DeltaValue
-      revenue: DeltaValue
-      conversions: DeltaValue
-      roas: DeltaValue
-    }>
+    channels: Record<
+      string,
+      {
+        spend: DeltaValue
+        revenue: DeltaValue
+        conversions: DeltaValue
+        roas: DeltaValue
+      }
+    >
   }
 }
 
@@ -53,7 +56,7 @@ export type Recommendation = {
   channel: Channel
   entity_id: string
   type: string
-  severity: 'critical' | 'warning' | 'info'
+  severity: "critical" | "warning" | "info"
   title: string
   description: string | null
   status: string
@@ -123,13 +126,38 @@ export type CampaignHealthResponse = {
   campaigns: CampaignHealth[]
 }
 
-const BASE = '/api/detox'
+export type SearchTermFlag = "wasted" | "strong" | null
 
-export async function getMetrics(since?: string, until?: string): Promise<MetricsResponse> {
+export type SearchTerm = {
+  searchTerm: string
+  campaignName: string | null
+  adGroupName: string | null
+  cost: number
+  clicks: number
+  impressions: number
+  conversions: number
+  revenue: number
+  roas: number | null
+  flag: SearchTermFlag
+}
+
+export type SearchTermsResponse = {
+  range: { since: string; until: string }
+  days: number
+  terms: SearchTerm[]
+  counts: { wasted: number; strong: number }
+}
+
+const BASE = "/api/detox"
+
+export async function getMetrics(
+  since?: string,
+  until?: string,
+): Promise<MetricsResponse> {
   const params = new URLSearchParams()
-  if (since) params.set('since', since)
-  if (until) params.set('until', until)
-  const res = await fetch(`${BASE}/metrics?${params}`, { cache: 'no-store' })
+  if (since) params.set("since", since)
+  if (until) params.set("until", until)
+  const res = await fetch(`${BASE}/metrics?${params}`, { cache: "no-store" })
   if (!res.ok) throw new Error(`Metrics feilet: ${res.status}`)
   return res.json()
 }
@@ -143,20 +171,27 @@ export async function getRecommendations(
   } = {},
 ): Promise<RecommendationsResponse> {
   const qs = new URLSearchParams()
-  qs.set('status', params.status ?? 'open')
-  if (params.channel) qs.set('channel', params.channel)
-  if (params.type) qs.set('type', params.type)
-  qs.set('limit', String(params.limit ?? 100))
-  const res = await fetch(`${BASE}/recommendations?${qs}`, { cache: 'no-store' })
+  qs.set("status", params.status ?? "open")
+  if (params.channel) qs.set("channel", params.channel)
+  if (params.type) qs.set("type", params.type)
+  qs.set("limit", String(params.limit ?? 100))
+  const res = await fetch(`${BASE}/recommendations?${qs}`, {
+    cache: "no-store",
+  })
   if (!res.ok) throw new Error(`Anbefalinger feilet: ${res.status}`)
   return res.json()
 }
 
-export async function getTrend(since?: string, until?: string): Promise<TrendResponse> {
+export async function getTrend(
+  since?: string,
+  until?: string,
+): Promise<TrendResponse> {
   const params = new URLSearchParams()
-  if (since) params.set('since', since)
-  if (until) params.set('until', until)
-  const res = await fetch(`${BASE}/metrics/trend?${params}`, { cache: 'no-store' })
+  if (since) params.set("since", since)
+  if (until) params.set("until", until)
+  const res = await fetch(`${BASE}/metrics/trend?${params}`, {
+    cache: "no-store",
+  })
   if (!res.ok) throw new Error(`Trend feilet: ${res.status}`)
   return res.json()
 }
@@ -166,9 +201,25 @@ export async function getCampaignHealth(
   until?: string,
 ): Promise<CampaignHealthResponse> {
   const params = new URLSearchParams()
-  if (since) params.set('since', since)
-  if (until) params.set('until', until)
-  const res = await fetch(`${BASE}/metrics/campaign-health?${params}`, { cache: 'no-store' })
+  if (since) params.set("since", since)
+  if (until) params.set("until", until)
+  const res = await fetch(`${BASE}/metrics/campaign-health?${params}`, {
+    cache: "no-store",
+  })
   if (!res.ok) throw new Error(`Kampanje-helse feilet: ${res.status}`)
+  return res.json()
+}
+
+export async function getSearchTerms(
+  days = 30,
+  limit = 100,
+): Promise<SearchTermsResponse> {
+  const params = new URLSearchParams()
+  params.set("days", String(days))
+  params.set("limit", String(limit))
+  const res = await fetch(`${BASE}/search-terms?${params}`, {
+    cache: "no-store",
+  })
+  if (!res.ok) throw new Error(`Søketermer feilet: ${res.status}`)
   return res.json()
 }
