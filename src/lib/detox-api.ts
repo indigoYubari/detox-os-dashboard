@@ -6,14 +6,24 @@ export type DeltaValue = {
   dir: 'up' | 'down' | 'flat'
 }
 
-export type ChannelMetrics = {
-  channel: Channel
+export type ChannelTypeBreakdown = {
+  entity_type: string
+  rows: number
   spend: number
   revenue: number
-  roas: number
+  conversions: number
+}
+
+export type ChannelMetrics = {
+  channel: Channel
+  rows: number
+  spend: number
+  revenue: number
+  roas: number | null
   conversions: number
   impressions: number
   clicks: number
+  byType: ChannelTypeBreakdown[]
 }
 
 export type MetricsResponse = {
@@ -32,6 +42,7 @@ export type MetricsResponse = {
     channels: Record<string, {
       spend: DeltaValue
       revenue: DeltaValue
+      conversions: DeltaValue
       roas: DeltaValue
     }>
   }
