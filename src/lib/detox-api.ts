@@ -26,13 +26,22 @@ export type ChannelMetrics = {
   byType: ChannelTypeBreakdown[]
 }
 
+export type TrafficSegment = {
+  segment: string
+  rows: number
+  spend: number
+  revenue: number
+  conversions: number
+  roas: number | null
+}
+
 export type MetricsResponse = {
   range: { since: string; until: string }
   previousRange?: { since: string; until: string }
   lastSync: string
   channels: ChannelMetrics[]
   totals: { adSpend: number; shopifyRevenue: number; shopifyOrders?: number }
-  segments?: { name: string; spend: number; revenue: number; roas: number }[]
+  segments?: TrafficSegment[]
   comparison?: {
     totals: {
       adSpend: DeltaValue
