@@ -1,6 +1,12 @@
 "use client"
 
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react"
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
 
 import { Badge } from "@/components/Badge"
 import { Button } from "@/components/Button"
@@ -17,91 +23,14 @@ import {
   type RecommendationsResponse,
   type RecommendationStatus,
 } from "@/lib/detox-api"
+import {
+  CHANNEL_LABELS as CHANNEL_LABEL,
+  SEVERITY,
+  TYPE_LABEL,
+  labelFor,
+  metricPairs,
+} from "@/lib/ad-format"
 import { cx } from "@/lib/utils"
-
-// ── label + formatting maps ───────────────────────────────────
-const SEVERITY: Record<
-  string,
-  { label: string; variant: "error" | "warning" | "default" }
-> = {
-  critical: { label: "Kritisk", variant: "error" },
-  warning: { label: "Advarsel", variant: "warning" },
-  info: { label: "Info", variant: "default" },
-}
-
-const CHANNEL_LABEL: Record<string, string> = {
-  google_ads: "Google Ads",
-  meta: "Meta",
-  klaviyo: "Klaviyo",
-  shopify: "Shopify",
-}
-
-const TYPE_LABEL: Record<string, string> = {
-  pause_or_revise: "Pause / revider",
-  increase_budget: "Øk budsjett",
-  insufficient_data: "For lite data",
-  add_negative_keyword: "Negativt søkeord",
-  review_flow: "Gjennomgå flow",
-  top_performer: "Topp-flow",
-  update_suppression_list: "Oppdater ekskludering",
-  reduce_frequency: "Reduser frekvens",
-}
-
-const labelFor = (map: Record<string, string>, key: string) =>
-  map[key] ?? key.replace(/_/g, " ")
-
-// Inline metadata drawn from `rationale`. Ordered by usefulness; deduped by
-// label so the same concept never shows twice.
-const MONEY_KEYS = new Set(["spend", "revenue", "shopifyRevenue"])
-const ROAS_KEYS = new Set(["roas", "validatedRoas", "platformRoas"])
-const META_ORDER: { key: string; label: string }[] = [
-  { key: "spend", label: "forbruk" },
-  { key: "shopifyRevenue", label: "omsetning" },
-  { key: "revenue", label: "omsetning" },
-  { key: "validatedRoas", label: "validert ROAS" },
-  { key: "roas", label: "ROAS" },
-  { key: "platformRoas", label: "plattform-ROAS" },
-  { key: "conversions", label: "konv." },
-  { key: "clicks", label: "klikk" },
-  { key: "frequency", label: "frekvens" },
-  { key: "buyer_count", label: "kjøpere" },
-  { key: "data_points", label: "datapunkter" },
-  { key: "segment", label: "segment" },
-]
-
-function formatMetric(key: string, value: unknown): string | null {
-  if (value == null) return null
-  if (MONEY_KEYS.has(key)) {
-    const n = Number(value)
-    return Number.isFinite(n) ? `kr ${Math.round(n).toLocaleString("nb-NO")}` : null
-  }
-  if (ROAS_KEYS.has(key)) {
-    const n = Number(value)
-    return Number.isFinite(n) ? `${n.toFixed(2)}x` : null
-  }
-  if (key === "frequency") {
-    const n = Number(value)
-    return Number.isFinite(n) ? n.toFixed(2) : null
-  }
-  if (typeof value === "number") return value.toLocaleString("nb-NO")
-  if (typeof value === "string") return value
-  return null
-}
-
-function metricPairs(rec: Recommendation): string[] {
-  const rationale = rec.rationale ?? {}
-  const out: string[] = []
-  const seenLabels = new Set<string>()
-  for (const { key, label } of META_ORDER) {
-    if (!(key in rationale) || seenLabels.has(label)) continue
-    const formatted = formatMetric(key, (rationale as Record<string, unknown>)[key])
-    if (formatted == null) continue
-    out.push(`${label}: ${formatted}`)
-    seenLabels.add(label)
-    if (out.length >= 5) break
-  }
-  return out
-}
 
 // ── severity tabs ─────────────────────────────────────────────
 type SeverityFilter = "all" | "critical" | "warning" | "info"
@@ -159,11 +88,10 @@ export default function AnbefalingerPage() {
 
   const counts = data?.counts
   const severityCount = (key: SeverityFilter) =>
-    key === "all" ? counts?.total ?? 0 : counts?.bySeverity?.[key] ?? 0
+    key === "all" ? (counts?.total ?? 0) : (counts?.bySeverity?.[key] ?? 0)
 
   const channelEntries = useMemo(
-    () =>
-      Object.entries(counts?.byChannel ?? {}).sort((a, b) => b[1] - a[1]),
+    () => Object.entries(counts?.byChannel ?? {}).sort((a, b) => b[1] - a[1]),
     [counts],
   )
 
@@ -350,7 +278,9 @@ function RecommendationCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={sev.variant}>{sev.label}</Badge>
-            <Badge variant="neutral">{labelFor(CHANNEL_LABEL, rec.channel)}</Badge>
+            <Badge variant="neutral">
+              {labelFor(CHANNEL_LABEL, rec.channel)}
+            </Badge>
             <Badge variant="neutral">{labelFor(TYPE_LABEL, rec.type)}</Badge>
           </div>
 
@@ -368,7 +298,7 @@ function RecommendationCard({
           )}
 
           {pairs.length > 0 && (
-            <p className="mt-2.5 text-xs text-gray-500 tabular-nums dark:text-gray-400">
+            <p className="mt-2.5 text-xs tabular-nums text-gray-500 dark:text-gray-400">
               {pairs.join("  ·  ")}
             </p>
           )}
