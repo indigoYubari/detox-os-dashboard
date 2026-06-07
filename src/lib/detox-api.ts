@@ -88,6 +88,41 @@ export type TrendResponse = {
   series: TrendPoint[]
 }
 
+export type AdQuality = {
+  byGrade: Record<string, number>
+  worst: string | null
+  worstNo: string | null
+  dominant: string | null
+  dominantNo: string | null
+}
+
+export type CampaignTempo = {
+  todaySpend: number
+  dailyBudget: number
+  pct: number | null
+}
+
+export type CampaignHealth = {
+  campaignId: string
+  name: string
+  channelType: string | null
+  biddingStrategy: string | null
+  dailyBudget: number
+  spend: number
+  revenue: number
+  conversions: number
+  roas: number | null
+  budgetLimited: boolean
+  adQuality: AdQuality
+  tempo: CampaignTempo
+  health: string
+}
+
+export type CampaignHealthResponse = {
+  range: { since: string; until: string }
+  campaigns: CampaignHealth[]
+}
+
 const BASE = '/api/detox'
 
 export async function getMetrics(since?: string, until?: string): Promise<MetricsResponse> {
@@ -123,5 +158,17 @@ export async function getTrend(since?: string, until?: string): Promise<TrendRes
   if (until) params.set('until', until)
   const res = await fetch(`${BASE}/metrics/trend?${params}`, { cache: 'no-store' })
   if (!res.ok) throw new Error(`Trend feilet: ${res.status}`)
+  return res.json()
+}
+
+export async function getCampaignHealth(
+  since?: string,
+  until?: string,
+): Promise<CampaignHealthResponse> {
+  const params = new URLSearchParams()
+  if (since) params.set('since', since)
+  if (until) params.set('until', until)
+  const res = await fetch(`${BASE}/metrics/campaign-health?${params}`, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`Kampanje-helse feilet: ${res.status}`)
   return res.json()
 }
