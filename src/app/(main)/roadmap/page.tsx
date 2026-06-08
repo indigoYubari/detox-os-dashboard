@@ -244,7 +244,7 @@ export default function Roadmap() {
                 </span>
               </div>
 
-              <div className="flex-1 space-y-3 rounded-lg bg-gray-50/60 p-3 dark:bg-gray-900/40">
+              <div className="flex-1 space-y-3 rounded-lg bg-gray-50/60 p-3 dark:bg-gray-800/50">
                 {cards.length === 0 ? (
                   <p className="py-6 text-center text-xs text-gray-400">Tomt</p>
                 ) : (

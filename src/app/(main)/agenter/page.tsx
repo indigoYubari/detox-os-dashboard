@@ -34,7 +34,7 @@ const STATUS_META: Record<
   kjorer: { label: "Kjører", dot: "bg-emerald-500", variant: "success" },
   inaktiv: { label: "Inaktiv", dot: "bg-gray-400", variant: "neutral" },
   feil: { label: "Feil", dot: "bg-red-500", variant: "error" },
-  planlagt: { label: "Planlagt", dot: "bg-blue-500", variant: "warning" },
+  planlagt: { label: "Planlagt", dot: "bg-blue-500", variant: "default" },
 }
 function rateClass(r: number) {
   if (r >= 95) return "text-emerald-600 dark:text-emerald-400"
