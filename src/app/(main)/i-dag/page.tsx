@@ -20,6 +20,7 @@ import {
   ChangesSkeleton,
 } from "@/components/i-dag/ChangesSection"
 import { KpiCard, KpiCardSkeleton } from "@/components/i-dag/KpiCard"
+import { LaunchpadSection } from "@/components/i-dag/LaunchpadSection"
 import {
   PriorityCard,
   PriorityEmpty,
@@ -286,6 +287,9 @@ export default function IDagPage() {
           {error}
         </div>
       )}
+
+      {/* ── Launchpad ── */}
+      <LaunchpadSection />
 
       {/* ── Dagens tall ── */}
       <section className="mt-8">
