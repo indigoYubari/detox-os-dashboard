@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Maximize2, X } from "lucide-react"
 
 import { Badge } from "@/components/Badge"
 import { Button } from "@/components/Button"
@@ -94,6 +95,21 @@ function formatNorsk(value: string | null): string | null {
   if (Number.isNaN(date.getTime())) return null
   return dateFmt.format(date)
 }
+
+const timeFmt = new Intl.DateTimeFormat("nb-NO", {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  timeZone: "Europe/Oslo",
+})
+
+const AUTOSAVE_INTERVAL_MS = 30_000
+
+const ZOOM_SYSTEM_PROMPT =
+  "Du er en klinisk assistent for en funksjonell medisinpraktiker. Analyser dette Zoom-møtereferatet og returner: 1) Nøkkelpunkter fra møtet (bullet-liste), 2) Anbefalte oppfølgingstester, 3) Første utkast til protokoll med tiltak. Svar på norsk."
+
+type AnthropicTextBlock = { type: string; text?: string }
+type AnthropicResponse = { content?: AnthropicTextBlock[] }
 
 function displayName(client: Client): string {
   const initial = client.last_name_initial?.trim()
@@ -508,6 +524,7 @@ function ExpandedPanel({
         rows={8}
         saveLabel="Lagre referat"
         onSave={(next) => saveField("zoom_summary", next)}
+        enableAi
       />
 
       {panelError && (
@@ -525,6 +542,7 @@ function CollapsibleField({
   rows,
   saveLabel,
   onSave,
+  enableAi = false,
 }: {
   label: string
   value: string | null
@@ -533,10 +551,12 @@ function CollapsibleField({
   rows: number
   saveLabel: string
   onSave: (next: string | null) => Promise<string | null>
+  enableAi?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const [draft, setDraft] = useState(value ?? "")
   const [saving, setSaving] = useState(false)
+  const [fsOpen, setFsOpen] = useState(false)
 
   // Synk utkast med lagret verdi ved ekstern oppdatering (f.eks. etter lagring).
   // Beholder upubliserte endringer ved kollaps, siden value da er uendret.
@@ -583,7 +603,16 @@ function CollapsibleField({
               "focus:ring-[var(--os-accent)]/20 focus:border-[var(--os-accent)] focus:ring-2",
             )}
           />
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setFsOpen(true)}
+              aria-label="Åpne fullskjerm"
+              title="Åpne fullskjerm"
+              className="focus-visible:ring-[var(--os-accent)]/40 inline-flex size-8 items-center justify-center rounded-md border-[0.5px] border-[var(--os-border)] bg-[var(--os-bg-hover)] text-[var(--os-text-muted)] outline-none transition-colors hover:border-[var(--os-border-accent)] hover:text-[var(--os-text-primary)] focus-visible:ring-2"
+            >
+              <Maximize2 className="size-4" aria-hidden="true" />
+            </button>
             <Button
               type="button"
               variant="secondary"
@@ -618,7 +647,216 @@ function CollapsibleField({
           )}
         </div>
       )}
+
+      <FullscreenEditor
+        open={fsOpen}
+        label={label}
+        placeholder={placeholder}
+        draft={draft}
+        onDraftChange={setDraft}
+        onRequestClose={() => setFsOpen(false)}
+        onSave={onSave}
+        enableAi={enableAi}
+      />
     </div>
+  )
+}
+
+function FullscreenEditor({
+  open,
+  label,
+  placeholder,
+  draft,
+  onDraftChange,
+  onRequestClose,
+  onSave,
+  enableAi,
+}: {
+  open: boolean
+  label: string
+  placeholder: string
+  draft: string
+  onDraftChange: (value: string) => void
+  onRequestClose: () => void
+  onSave: (next: string | null) => Promise<string | null>
+  enableAi: boolean
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const draftRef = useRef(draft)
+  const [saving, setSaving] = useState(false)
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+  const [analysis, setAnalysis] = useState<string | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+
+  useEffect(() => {
+    draftRef.current = draft
+  }, [draft])
+
+  // Styr native dialog via ref. showModal() gir top-layer-rendering uten position:fixed.
+  useEffect(() => {
+    const el = dialogRef.current
+    if (!el) return
+    if (open && !el.open) el.showModal()
+    if (!open && el.open) el.close()
+  }, [open])
+
+  async function persist(value: string): Promise<string | null> {
+    setSaving(true)
+    const err = await onSave(value.trim() || null)
+    setSaving(false)
+    if (!err) setLastSavedAt(new Date())
+    return err
+  }
+
+  // Auto-lagring hvert 30. sekund mens modalen er åpen.
+  useEffect(() => {
+    if (!open) return
+    const id = setInterval(() => {
+      void persist(draftRef.current)
+    }, AUTOSAVE_INTERVAL_MS)
+    return () => clearInterval(id)
+    // persist er stabil nok her; vi bevisst kun re-armer på open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  async function saveAndClose() {
+    await persist(draftRef.current)
+    onRequestClose()
+  }
+
+  async function analyze() {
+    setAnalyzing(true)
+    setAiError(null)
+    setAnalysis(null)
+    try {
+      const key = process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY
+      if (!key) {
+        setAiError("Mangler NEXT_PUBLIC_ANTHROPIC_API_KEY i miljøet.")
+        return
+      }
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": key,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 2048,
+          system: ZOOM_SYSTEM_PROMPT,
+          messages: [{ role: "user", content: draft }],
+        }),
+      })
+      if (!res.ok) {
+        const detail = await res.text()
+        setAiError(`API-feil (${res.status}): ${detail}`)
+        return
+      }
+      const data = (await res.json()) as AnthropicResponse
+      const text = (data.content ?? [])
+        .filter((b) => b.type === "text" && b.text)
+        .map((b) => b.text as string)
+        .join("\n")
+      setAnalysis(text || "Tomt svar fra API.")
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Ukjent feil.")
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  return (
+    <dialog
+      ref={dialogRef}
+      onClose={onRequestClose}
+      onCancel={onRequestClose}
+      className="m-0 h-dvh max-h-none w-screen max-w-none bg-[#020508] p-0 text-[var(--os-text-primary)] backdrop:bg-black/70"
+    >
+      <div className="flex h-dvh flex-col p-5 sm:p-8">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="jbm text-base font-semibold text-[var(--os-text-primary)]">
+            {label}
+          </h2>
+          <div className="flex items-center gap-2">
+            {enableAi && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void analyze()}
+                isLoading={analyzing}
+                loadingText="Analyserer"
+                disabled={!draft.trim()}
+              >
+                Analyser med AI
+              </Button>
+            )}
+            <Button
+              type="button"
+              onClick={() => void saveAndClose()}
+              isLoading={saving}
+              loadingText="Lagrer"
+              className="hover:bg-[var(--os-accent)]/90 border-transparent bg-[var(--os-accent)] text-[#020508]"
+            >
+              Lagre og lukk
+            </Button>
+            <button
+              type="button"
+              onClick={onRequestClose}
+              aria-label="Lukk uten å lagre"
+              title="Lukk uten å lagre (ESC)"
+              className="focus-visible:ring-[var(--os-accent)]/40 inline-flex size-9 items-center justify-center rounded-md border-[0.5px] border-[var(--os-border)] bg-[var(--os-bg-hover)] text-[var(--os-text-muted)] outline-none transition-colors hover:text-[var(--os-text-primary)] focus-visible:ring-2"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
+          <textarea
+            value={draft}
+            onChange={(e) => onDraftChange(e.target.value)}
+            placeholder={placeholder}
+            className={cx(
+              "min-h-0 flex-1 resize-none rounded-md border px-3 py-2.5 text-sm leading-6 shadow-sm outline-none transition",
+              "border-gray-300 bg-white text-gray-900 placeholder-gray-400",
+              "dark:border-gray-800 dark:bg-gray-950 dark:text-gray-50 dark:placeholder-gray-500",
+              "focus:ring-[var(--os-accent)]/20 focus:border-[var(--os-accent)] focus:ring-2",
+            )}
+          />
+
+          {enableAi && (analyzing || analysis || aiError) && (
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-md border-[0.5px] border-[var(--os-border)] bg-[var(--os-bg-card)] p-4">
+              <span className="jbm text-[10px] uppercase tracking-wide text-[var(--os-text-muted)]">
+                AI-analyse
+              </span>
+              {analyzing ? (
+                <p className="mt-2 text-sm text-[var(--os-text-muted)]">
+                  Analyserer referat…
+                </p>
+              ) : aiError ? (
+                <p className="mt-2 text-sm text-[var(--os-danger)]">{aiError}</p>
+              ) : (
+                <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[var(--os-text-secondary)]">
+                  {analysis}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-3 flex items-center justify-between text-[10px] tabular-nums text-[var(--os-text-muted)]">
+          <span>{draft.length} tegn</span>
+          <span>
+            {lastSavedAt
+              ? `Sist lagret kl. ${timeFmt.format(lastSavedAt)}`
+              : "Ikke lagret ennå"}
+          </span>
+        </div>
+      </div>
+    </dialog>
   )
 }
 
