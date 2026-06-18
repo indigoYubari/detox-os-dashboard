@@ -42,6 +42,7 @@ type Client = {
   meeting_date: string | null
   notes: string | null
   zoom_summary: string | null
+  ai_analysis: string | null
   created_at: string
 }
 
@@ -139,7 +140,7 @@ export default function KliniskPage() {
     const { data, error: loadError } = await supabase
       .from("clients")
       .select(
-        "id, first_name, last_name_initial, status, tests_received, meeting_date, notes, zoom_summary, created_at",
+        "id, first_name, last_name_initial, status, tests_received, meeting_date, notes, zoom_summary, ai_analysis, created_at",
       )
       .order("created_at", { ascending: false })
 
@@ -420,6 +421,21 @@ function ExpandedPanel({
     return null
   }
 
+  // Lagrer AI-analysen til ai_analysis-kolonnen. Returnerer feilmelding eller null.
+  async function saveAnalysis(next: string): Promise<string | null> {
+    setPanelError(null)
+    const { error } = await supabase
+      .from("clients")
+      .update({ ai_analysis: next })
+      .eq("id", item.id)
+    if (error) {
+      setPanelError(error.message)
+      return error.message
+    }
+    onUpdate({ ...item, ai_analysis: next })
+    return null
+  }
+
   return (
     <div className="border-t-[0.5px] border-[var(--os-border)] px-4 pb-4 pt-3">
       <div className="flex items-start justify-between gap-3">
@@ -519,6 +535,8 @@ function ExpandedPanel({
         saveLabel="Lagre referat"
         onSave={(next) => saveField("zoom_summary", next)}
         enableAi
+        initialAnalysis={item.ai_analysis}
+        onSaveAnalysis={saveAnalysis}
       />
 
       {panelError && (
@@ -537,6 +555,8 @@ function CollapsibleField({
   saveLabel,
   onSave,
   enableAi = false,
+  initialAnalysis = null,
+  onSaveAnalysis,
 }: {
   label: string
   value: string | null
@@ -546,6 +566,8 @@ function CollapsibleField({
   saveLabel: string
   onSave: (next: string | null) => Promise<string | null>
   enableAi?: boolean
+  initialAnalysis?: string | null
+  onSaveAnalysis?: (next: string) => Promise<string | null>
 }) {
   const [expanded, setExpanded] = useState(false)
   const [draft, setDraft] = useState(value ?? "")
@@ -651,6 +673,8 @@ function CollapsibleField({
         onRequestClose={() => setFsOpen(false)}
         onSave={onSave}
         enableAi={enableAi}
+        initialAnalysis={initialAnalysis}
+        onSaveAnalysis={onSaveAnalysis}
       />
     </div>
   )
@@ -665,6 +689,8 @@ function FullscreenEditor({
   onRequestClose,
   onSave,
   enableAi,
+  initialAnalysis = null,
+  onSaveAnalysis,
 }: {
   open: boolean
   label: string
@@ -674,6 +700,8 @@ function FullscreenEditor({
   onRequestClose: () => void
   onSave: (next: string | null) => Promise<string | null>
   enableAi: boolean
+  initialAnalysis?: string | null
+  onSaveAnalysis?: (next: string) => Promise<string | null>
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const draftRef = useRef(draft)
@@ -682,10 +710,21 @@ function FullscreenEditor({
   const [analysis, setAnalysis] = useState<string | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
+  const [analysisNote, setAnalysisNote] = useState<string | null>(null)
 
   useEffect(() => {
     draftRef.current = draft
   }, [draft])
+
+  // Når modalen åpnes: vis en eventuell tidligere lagret analyse, og nullstill
+  // status. Leser initialAnalysis ved åpning, så senere lagring ikke trigger reset.
+  useEffect(() => {
+    if (!open) return
+    setAnalysis(initialAnalysis ?? null)
+    setAiError(null)
+    setAnalysisNote(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   // Styr native dialog via ref. showModal() gir top-layer-rendering uten position:fixed.
   useEffect(() => {
@@ -722,6 +761,7 @@ function FullscreenEditor({
   async function analyze() {
     setAnalyzing(true)
     setAiError(null)
+    setAnalysisNote(null)
     setAnalysis(null)
     try {
       // Kaller egen server-route; Anthropic-nøkkelen ligger kun på serveren.
@@ -735,7 +775,13 @@ function FullscreenEditor({
         setAiError(data.error ?? `Serverfeil (${res.status}).`)
         return
       }
-      setAnalysis(data.analysis ?? "Tomt svar fra API.")
+      const text = data.analysis ?? "Tomt svar fra API."
+      setAnalysis(text)
+      // Lagre analysen automatisk på klienten når den foreligger.
+      if (onSaveAnalysis && data.analysis) {
+        const err = await onSaveAnalysis(text)
+        setAnalysisNote(err ? "Kunne ikke lagre analyse" : "Analyse lagret")
+      }
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "Ukjent feil.")
     } finally {
@@ -804,9 +850,23 @@ function FullscreenEditor({
 
           {enableAi && (analyzing || analysis || aiError) && (
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-md border-[0.5px] border-[var(--os-border)] bg-[var(--os-bg-card)] p-4">
-              <span className="jbm text-[10px] uppercase tracking-wide text-[var(--os-text-muted)]">
-                AI-analyse
-              </span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="jbm text-[10px] uppercase tracking-wide text-[var(--os-text-muted)]">
+                  AI-analyse
+                </span>
+                {analysisNote && (
+                  <span
+                    className={cx(
+                      "jbm text-[10px] uppercase tracking-wide",
+                      analysisNote === "Analyse lagret"
+                        ? "text-[var(--os-accent)]"
+                        : "text-[var(--os-danger)]",
+                    )}
+                  >
+                    {analysisNote}
+                  </span>
+                )}
+              </div>
               {analyzing ? (
                 <p className="mt-2 text-sm text-[var(--os-text-muted)]">
                   Analyserer referat…
