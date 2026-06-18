@@ -5,13 +5,6 @@ import { useEffect, useMemo, useState } from "react"
 import { Badge } from "@/components/Badge"
 import { Button } from "@/components/Button"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/Select"
-import {
   approveProposal,
   getProposalExecutionMode,
   getProposals,
@@ -20,7 +13,6 @@ import {
   type ProposalDecisionResponse,
   type ProposalExecutionResult,
   type ProposalExecutionModeResponse,
-  type ProposalStatus,
   type ProposalsResponse,
 } from "@/lib/detox-api"
 import {
@@ -34,6 +26,12 @@ import {
 import { cx } from "@/lib/utils"
 
 type PriorityFilter = "all" | "critical" | "warning" | "info"
+type MainTab = "pending" | "history"
+
+const MAIN_TABS: { key: MainTab; label: string }[] = [
+  { key: "pending", label: "Venter" },
+  { key: "history", label: "Historikk" },
+]
 
 const PRIORITY_TABS: { key: PriorityFilter; label: string }[] = [
   { key: "all", label: "Alle" },
@@ -56,7 +54,7 @@ const EXECUTION_LABEL: Record<string, string> = {
 }
 
 export default function ForslagPage() {
-  const [status, setStatus] = useState<ProposalStatus>("pending")
+  const [tab, setTab] = useState<MainTab>("pending")
   const [priority, setPriority] = useState<PriorityFilter>("all")
   const [channel, setChannel] = useState("all")
   const [data, setData] = useState<ProposalsResponse | null>(null)
@@ -94,11 +92,14 @@ export default function ForslagPage() {
     let cancelled = false
     setLoading(true)
     setError(null)
-    getProposals({ status, limit: 500 })
+    // Venter henter kun pending. Historikk henter alt og filtreres client-side
+    // til status !== "pending" (API har ingen egen "decided"-param).
+    getProposals({ status: tab === "pending" ? "pending" : "all", limit: 500 })
       .then((res) => {
         if (cancelled) return
         setData(res)
         setChannel("all")
+        setPriority("all")
         setLoading(false)
       })
       .catch((e: Error) => {
@@ -109,7 +110,7 @@ export default function ForslagPage() {
     return () => {
       cancelled = true
     }
-  }, [status])
+  }, [tab])
 
   useEffect(() => {
     if (!toast) return
@@ -117,27 +118,34 @@ export default function ForslagPage() {
     return () => clearTimeout(t)
   }, [toast])
 
-  const counts = data?.counts
+  const baseList = useMemo(() => {
+    const all = data?.proposals ?? []
+    return tab === "history" ? all.filter((p) => p.status !== "pending") : all
+  }, [data, tab])
+
+  const counts = useMemo(() => computeCounts(baseList), [baseList])
   const priorityCount = (key: PriorityFilter) =>
-    key === "all" ? (counts?.total ?? 0) : (counts?.byPriority?.[key] ?? 0)
+    key === "all" ? counts.total : (counts.byPriority[key] ?? 0)
 
   const channelEntries = useMemo(
-    () => Object.entries(counts?.byChannel ?? {}).sort((a, b) => b[1] - a[1]),
+    () => Object.entries(counts.byChannel).sort((a, b) => b[1] - a[1]),
     [counts],
   )
 
   const visible = useMemo(() => {
-    let list = data?.proposals ?? []
+    let list = baseList
     if (priority !== "all") list = list.filter((p) => p.priority === priority)
     if (channel !== "all") list = list.filter((p) => p.channel === channel)
+    const byRecency = (a: Proposal, b: Proposal) =>
+      (b.decided_at ?? b.created_at) > (a.decided_at ?? a.created_at) ? 1 : -1
     return [...list].sort(
-      (a, b) =>
-        priorityRank(a.priority) - priorityRank(b.priority) ||
-        ((b.decided_at ?? b.created_at) > (a.decided_at ?? a.created_at)
-          ? 1
-          : -1),
+      tab === "history"
+        ? byRecency
+        : (a, b) =>
+            priorityRank(a.priority) - priorityRank(b.priority) ||
+            byRecency(a, b),
     )
-  }, [data, priority, channel])
+  }, [baseList, priority, channel, tab])
 
   async function decide(id: string, action: "approve" | "reject") {
     setBusyId(id)
@@ -177,7 +185,25 @@ export default function ForslagPage() {
         />
       </div>
 
-      <div className="mt-6 border-b border-gray-200 dark:border-gray-800">
+      <div className="mt-6 flex w-fit gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-900">
+        {MAIN_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={cx(
+              "rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
+              tab === t.key
+                ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-50"
+                : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-5 border-b border-gray-200 dark:border-gray-800">
         <nav className="-mb-px flex gap-6" aria-label="Prioritet">
           {PRIORITY_TABS.map((tab) => (
             <button
@@ -216,17 +242,6 @@ export default function ForslagPage() {
             </ChannelPill>
           ))}
         </div>
-        <Select value={status} onValueChange={(v) => setStatus(v as ProposalStatus)}>
-          <SelectTrigger className="w-36">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pending">Venter</SelectItem>
-            <SelectItem value="approved">Godkjent</SelectItem>
-            <SelectItem value="rejected">Avvist</SelectItem>
-            <SelectItem value="all">Alle</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       {error && (
@@ -241,7 +256,9 @@ export default function ForslagPage() {
         ) : visible.length === 0 ? (
           <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50/50 p-10 text-center dark:border-gray-700 dark:bg-gray-900/40">
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Ingen forslag med valgte filtre
+              {tab === "history"
+                ? "Ingen forslag i historikken ennå"
+                : "Ingen forslag med valgte filtre"}
             </p>
           </div>
         ) : (
@@ -324,6 +341,12 @@ function ProposalCard({
     label: proposal.priority,
     variant: "default" as const,
   }
+  const statusVariant =
+    proposal.status === "approved"
+      ? "success"
+      : proposal.status === "rejected"
+        ? "error"
+        : "neutral"
   const execution = proposal.execution_status
   const executionVariant =
     execution === "done"
@@ -338,6 +361,11 @@ function ProposalCard({
     <div className="rounded-lg border border-gray-200 bg-white p-5 transition-colors hover:border-gray-300 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={sev.variant}>{sev.label}</Badge>
+        {proposal.status !== "pending" && (
+          <Badge variant={statusVariant}>
+            {STATUS_LABEL[proposal.status] ?? proposal.status}
+          </Badge>
+        )}
         <Badge variant="neutral">{labelFor(CHANNEL_LABELS, proposal.channel)}</Badge>
         <Badge variant="neutral">
           {proposalDisplayName(proposal)}
@@ -460,6 +488,16 @@ function SkeletonList() {
       ))}
     </>
   )
+}
+
+function computeCounts(list: Proposal[]) {
+  const byPriority: Record<string, number> = {}
+  const byChannel: Record<string, number> = {}
+  for (const p of list) {
+    byPriority[p.priority] = (byPriority[p.priority] ?? 0) + 1
+    byChannel[p.channel] = (byChannel[p.channel] ?? 0) + 1
+  }
+  return { total: list.length, byPriority, byChannel }
 }
 
 function priorityRank(priority: string) {
