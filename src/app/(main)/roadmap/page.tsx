@@ -35,6 +35,14 @@ type Pipeline = {
   status: RoadmapStatus | string
   target_date: string | null
   completed_at: string | null
+  links: string[] | null
+}
+
+type Comment = {
+  id: string
+  roadmap_id: string
+  content: string
+  created_at: string
 }
 
 type NewPipeline = {
@@ -80,6 +88,15 @@ export default function RoadmapPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  function updateItem(updated: Pipeline) {
+    setPipelines((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+  }
+
+  function toggleExpanded(id: string) {
+    setExpandedId((prev) => (prev === id ? null : id))
+  }
 
   async function load() {
     setLoading(true)
@@ -87,7 +104,7 @@ export default function RoadmapPage() {
     const { data, error: loadError } = await supabase
       .from("roadmap")
       .select(
-        "id, name, description, category, area, status, target_date, completed_at",
+        "id, name, description, category, area, status, target_date, completed_at, links",
       )
       .order("completed_at", { ascending: false, nullsFirst: false })
 
@@ -155,6 +172,9 @@ export default function RoadmapPage() {
             title={col.title}
             items={grouped[col.key]}
             loading={loading}
+            expandedId={expandedId}
+            onToggle={toggleExpanded}
+            onUpdate={updateItem}
           />
         ))}
       </div>
@@ -175,10 +195,16 @@ function Column({
   title,
   items,
   loading,
+  expandedId,
+  onToggle,
+  onUpdate,
 }: {
   title: string
   items: Pipeline[]
   loading: boolean
+  expandedId: string | null
+  onToggle: (id: string) => void
+  onUpdate: (item: Pipeline) => void
 }) {
   return (
     <section className="flex flex-col gap-3">
@@ -205,47 +231,333 @@ function Column({
           </p>
         </div>
       ) : (
-        items.map((item) => <Card key={item.id} item={item} />)
+        items.map((item) => (
+          <Card
+            key={item.id}
+            item={item}
+            expanded={expandedId === item.id}
+            onToggle={() => onToggle(item.id)}
+            onUpdate={onUpdate}
+          />
+        ))
       )}
     </section>
   )
 }
 
-function Card({ item }: { item: Pipeline }) {
+function Card({
+  item,
+  expanded,
+  onToggle,
+  onUpdate,
+}: {
+  item: Pipeline
+  expanded: boolean
+  onToggle: () => void
+  onUpdate: (item: Pipeline) => void
+}) {
   const targetDate = formatNorsk(item.target_date)
   const completedDate = formatNorsk(item.completed_at)
 
   return (
-    <div className="rounded-[var(--os-radius-lg)] border-[0.5px] border-[var(--os-border)] bg-[var(--os-bg-card)] px-4 py-[14px] transition-colors duration-150 hover:border-[var(--os-border-accent)]">
-      <div className="flex flex-wrap items-center gap-2">
-        {item.category && <Badge>{item.category}</Badge>}
-        {item.area && (
-          <span className="jbm text-[10px] uppercase tracking-wide text-[var(--os-text-muted)]">
-            {item.area}
-          </span>
+    <div
+      className={cx(
+        "rounded-[var(--os-radius-lg)] border-[0.5px] bg-[var(--os-bg-card)] transition-colors duration-150",
+        expanded
+          ? "border-[var(--os-border-accent)]"
+          : "border-[var(--os-border)] hover:border-[var(--os-border-accent)]",
+      )}
+    >
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            onToggle()
+          }
+        }}
+        className="focus-visible:ring-[var(--os-accent)]/40 cursor-pointer px-4 py-[14px] outline-none focus-visible:ring-2"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {item.category && <Badge>{item.category}</Badge>}
+          {item.area && (
+            <span className="jbm text-[10px] uppercase tracking-wide text-[var(--os-text-muted)]">
+              {item.area}
+            </span>
+          )}
+        </div>
+
+        <h3 className="mt-2.5 text-sm font-semibold leading-6 text-[var(--os-text-primary)]">
+          {item.name}
+        </h3>
+
+        {item.description && !expanded && (
+          <p className="mt-1 line-clamp-2 text-sm leading-6 text-[var(--os-text-secondary)]">
+            {item.description}
+          </p>
+        )}
+
+        {(targetDate || completedDate) && (
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--os-text-muted)]">
+            {completedDate ? (
+              <span className="text-[var(--os-accent)]">
+                Fullført {completedDate}
+              </span>
+            ) : (
+              targetDate && <span>Mål: {targetDate}</span>
+            )}
+          </div>
         )}
       </div>
 
-      <h3 className="mt-2.5 text-sm font-semibold leading-6 text-[var(--os-text-primary)]">
-        {item.name}
-      </h3>
-
-      {item.description && (
-        <p className="mt-1 text-sm leading-6 text-[var(--os-text-secondary)]">
-          {item.description}
-        </p>
+      {expanded && (
+        <ExpandedPanel item={item} onClose={onToggle} onUpdate={onUpdate} />
       )}
+    </div>
+  )
+}
 
-      {(targetDate || completedDate) && (
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--os-text-muted)]">
-          {completedDate ? (
-            <span className="text-[var(--os-accent)]">
-              Fullført {completedDate}
+function ExpandedPanel({
+  item,
+  onClose,
+  onUpdate,
+}: {
+  item: Pipeline
+  onClose: () => void
+  onUpdate: (item: Pipeline) => void
+}) {
+  const [comments, setComments] = useState<Comment[]>([])
+  const [commentsLoading, setCommentsLoading] = useState(true)
+  const [newComment, setNewComment] = useState("")
+  const [savingComment, setSavingComment] = useState(false)
+  const [newLink, setNewLink] = useState("")
+  const [savingLink, setSavingLink] = useState(false)
+  const [panelError, setPanelError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setCommentsLoading(true)
+    supabase
+      .from("roadmap_comments")
+      .select("id, roadmap_id, content, created_at")
+      .eq("roadmap_id", item.id)
+      .order("created_at", { ascending: true })
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error) setPanelError(error.message)
+        else setComments((data ?? []) as Comment[])
+        setCommentsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [item.id])
+
+  async function changeStatus(next: RoadmapStatus) {
+    if (next === item.status) return
+    setPanelError(null)
+    const completedAt = next === "completed" ? new Date().toISOString() : null
+    const { error } = await supabase
+      .from("roadmap")
+      .update({ status: next, completed_at: completedAt })
+      .eq("id", item.id)
+    if (error) {
+      setPanelError(error.message)
+      return
+    }
+    onUpdate({ ...item, status: next, completed_at: completedAt })
+  }
+
+  async function addComment() {
+    const content = newComment.trim()
+    if (!content) return
+    setSavingComment(true)
+    setPanelError(null)
+    const { data, error } = await supabase
+      .from("roadmap_comments")
+      .insert({ roadmap_id: item.id, content })
+      .select("id, roadmap_id, content, created_at")
+      .single()
+    setSavingComment(false)
+    if (error) {
+      setPanelError(error.message)
+      return
+    }
+    if (data) setComments((prev) => [...prev, data as Comment])
+    setNewComment("")
+  }
+
+  async function addLink() {
+    const url = newLink.trim()
+    if (!url) return
+    setSavingLink(true)
+    setPanelError(null)
+    const next = [...(item.links ?? []), url]
+    const { error } = await supabase
+      .from("roadmap")
+      .update({ links: next })
+      .eq("id", item.id)
+    setSavingLink(false)
+    if (error) {
+      setPanelError(error.message)
+      return
+    }
+    onUpdate({ ...item, links: next })
+    setNewLink("")
+  }
+
+  const links = item.links ?? []
+
+  return (
+    <div className="border-t-[0.5px] border-[var(--os-border)] px-4 pb-4 pt-3">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm leading-6 text-[var(--os-text-primary)]">
+          {item.description || (
+            <span className="text-[var(--os-text-muted)]">
+              Ingen beskrivelse
             </span>
-          ) : (
-            targetDate && <span>Mål: {targetDate}</span>
           )}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Lukk"
+          className="focus-visible:ring-[var(--os-accent)]/40 -mr-1 -mt-0.5 shrink-0 rounded p-1 text-[var(--os-text-muted)] outline-none transition-colors hover:text-[var(--os-text-primary)] focus-visible:ring-2"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Status */}
+      <div className="mt-4">
+        <span className="jbm text-[10px] uppercase tracking-wide text-[var(--os-text-muted)]">
+          Status
+        </span>
+        <Select
+          value={
+            item.status === "active" ||
+            item.status === "planned" ||
+            item.status === "completed"
+              ? item.status
+              : "active"
+          }
+          onValueChange={(v) => void changeStatus(v as RoadmapStatus)}
+        >
+          <SelectTrigger className="mt-1.5 w-full">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="active">Under bygging</SelectItem>
+            <SelectItem value="planned">Neste</SelectItem>
+            <SelectItem value="completed">Ferdig</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Lenker */}
+      <div className="mt-4">
+        <span className="jbm text-[10px] uppercase tracking-wide text-[var(--os-text-muted)]">
+          Lenker
+        </span>
+        {links.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {links.map((url, i) => (
+              <a
+                key={`${url}-${i}`}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex max-w-[14rem] items-center truncate rounded-full border border-[var(--os-border-accent)] bg-[var(--os-bg-active)] px-2.5 py-0.5 text-xs text-[var(--os-accent)] transition-colors hover:bg-[var(--os-accent-dim)]"
+              >
+                {url}
+              </a>
+            ))}
+          </div>
+        )}
+        <div className="mt-2 flex gap-2">
+          <Input
+            value={newLink}
+            onChange={(e) => setNewLink(e.target.value)}
+            placeholder="https://…"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                void addLink()
+              }
+            }}
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void addLink()}
+            isLoading={savingLink}
+            disabled={!newLink.trim()}
+          >
+            Legg til
+          </Button>
         </div>
+      </div>
+
+      {/* Kommentarer */}
+      <div className="mt-4">
+        <span className="jbm text-[10px] uppercase tracking-wide text-[var(--os-text-muted)]">
+          Kommentarer
+        </span>
+        {commentsLoading ? (
+          <p className="mt-1.5 text-xs text-[var(--os-text-muted)]">
+            Laster kommentarer…
+          </p>
+        ) : comments.length === 0 ? (
+          <p className="mt-1.5 text-xs text-[var(--os-text-muted)]">
+            Ingen kommentarer ennå
+          </p>
+        ) : (
+          <ul className="mt-1.5 space-y-2">
+            {comments.map((c) => (
+              <li
+                key={c.id}
+                className="rounded-[var(--os-radius-sm)] border-[0.5px] border-[var(--os-border)] bg-[var(--os-bg-hover)] px-3 py-2"
+              >
+                <p className="text-sm leading-6 text-[var(--os-text-secondary)]">
+                  {c.content}
+                </p>
+                <span className="mt-0.5 block text-[10px] tabular-nums text-[var(--os-text-muted)]">
+                  {formatNorsk(c.created_at)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="mt-2 flex gap-2">
+          <Input
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            placeholder="Skriv en kommentar…"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                void addComment()
+              }
+            }}
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void addComment()}
+            isLoading={savingComment}
+            disabled={!newComment.trim()}
+          >
+            Legg til
+          </Button>
+        </div>
+      </div>
+
+      {panelError && (
+        <p className="mt-3 text-sm text-[var(--os-danger)]">{panelError}</p>
       )}
     </div>
   )
