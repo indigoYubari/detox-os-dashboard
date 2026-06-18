@@ -13,11 +13,13 @@ import {
 } from "@/components/Select"
 import {
   approveProposal,
+  getProposalExecutionMode,
   getProposals,
   rejectProposal,
   type Proposal,
   type ProposalDecisionResponse,
   type ProposalExecutionResult,
+  type ProposalExecutionModeResponse,
   type ProposalStatus,
   type ProposalsResponse,
 } from "@/lib/detox-api"
@@ -61,7 +63,32 @@ export default function ForslagPage() {
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [executionMode, setExecutionMode] =
+    useState<ProposalExecutionModeResponse["proposalExecution"] | null>(null)
+  const [executionModeError, setExecutionModeError] = useState<string | null>(null)
+  const [executionModeLoading, setExecutionModeLoading] = useState(true)
   const [toast, setToast] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setExecutionModeLoading(true)
+    getProposalExecutionMode()
+      .then((res) => {
+        if (cancelled) return
+        setExecutionMode(res.proposalExecution)
+        setExecutionModeError(null)
+        setExecutionModeLoading(false)
+      })
+      .catch((e: Error) => {
+        if (cancelled) return
+        setExecutionMode(null)
+        setExecutionModeError(e.message ?? "Kunne ikke sjekke execution-modus")
+        setExecutionModeLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -143,9 +170,11 @@ export default function ForslagPage() {
             Railway-flagget, default er dry-run.
           </p>
         </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-300">
-          Ikke slå på live-modus uten kontrollert testvindu.
-        </div>
+        <ExecutionModeBanner
+          mode={executionMode}
+          error={executionModeError}
+          loading={executionModeLoading}
+        />
       </div>
 
       <div className="mt-6 border-b border-gray-200 dark:border-gray-800">
@@ -236,6 +265,46 @@ export default function ForslagPage() {
           {toast}
         </div>
       )}
+    </div>
+  )
+}
+
+function ExecutionModeBanner({
+  mode,
+  error,
+  loading,
+}: {
+  mode: ProposalExecutionModeResponse["proposalExecution"] | null
+  error: string | null
+  loading: boolean
+}) {
+  if (loading) {
+    return (
+      <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
+        Sjekker execution-modus
+      </div>
+    )
+  }
+
+  if (error || !mode) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-300">
+        Modus ukjent. Sjekk Railway før godkjenning.
+      </div>
+    )
+  }
+
+  if (mode.enabled) {
+    return (
+      <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+        Live handlinger PÅ. Godkjenning kan endre annonser.
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
+      Dry-run aktiv. Godkjenning markerer forslag, men endrer ikke annonser.
     </div>
   )
 }
