@@ -14,13 +14,15 @@ import {
   DropdownMenuSubMenuTrigger,
   DropdownMenuTrigger,
 } from "@/components/Dropdown"
+import { supabase } from "@/lib/supabase"
 import {
-  RiArrowRightUpLine,
   RiComputerLine,
+  RiLogoutBoxLine,
   RiMoonLine,
   RiSunLine,
 } from "@remixicon/react"
 import { useTheme } from "next-themes"
+import { useRouter } from "next/navigation"
 import * as React from "react"
 
 export type DropdownUserProfileProps = {
@@ -34,9 +36,16 @@ export function DropdownUserProfile({
 }: DropdownUserProfileProps) {
   const [mounted, setMounted] = React.useState(false)
   const { theme, setTheme } = useTheme()
+  const router = useRouter()
+
   React.useEffect(() => {
     setMounted(true)
   }, [])
+
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+    router.push("/login")
+  }
 
   if (!mounted) {
     return null
@@ -93,31 +102,10 @@ export function DropdownUserProfile({
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuItem>
-              Changelog
-              <RiArrowRightUpLine
-                className="mb-1 ml-1 size-2.5 shrink-0 text-gray-500"
-                aria-hidden="true"
-              />
+            <DropdownMenuItem onClick={handleSignOut}>
+              <RiLogoutBoxLine className="size-4 shrink-0" aria-hidden="true" />
+              Logg ut
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              Documentation
-              <RiArrowRightUpLine
-                className="mb-1 ml-1 size-2.5 shrink-0 text-gray-500"
-                aria-hidden="true"
-              />
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              Join Slack community
-              <RiArrowRightUpLine
-                className="mb-1 ml-1 size-2.5 shrink-0 text-gray-500"
-                aria-hidden="true"
-              />
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuItem>Sign out</DropdownMenuItem>
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
