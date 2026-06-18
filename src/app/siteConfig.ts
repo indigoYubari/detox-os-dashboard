@@ -21,6 +21,7 @@ export const siteConfig = {
     innhold: "/innhold",
     quiz: "/quiz",
     // Operasjon
+    klinisk: "/klinisk",
     leverandorer: "/leverandorer",
     agenter: "/agenter",
     pipelines: "/pipelines",

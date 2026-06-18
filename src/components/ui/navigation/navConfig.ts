@@ -4,6 +4,7 @@ import {
   Coins,
   FileText,
   GitBranch,
+  HeartPulse,
   HelpCircle,
   LayoutDashboard,
   ListChecks,
@@ -86,6 +87,11 @@ export const navSections: NavSection[] = [
   {
     title: "Operasjon",
     items: [
+      {
+        name: "Klinisk",
+        href: siteConfig.baseLinks.klinisk,
+        icon: HeartPulse,
+      },
       {
         name: "Leverandører",
         href: siteConfig.baseLinks.leverandorer,
