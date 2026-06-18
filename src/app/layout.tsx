@@ -66,7 +66,7 @@ export default function RootLayout({
             enableSystem={false}
           >
             <Sidebar />
-            <main className="lg:pl-[56px]">{children}</main>
+            <main className="lg:pl-[200px]">{children}</main>
           </ThemeProvider>
         </div>
       </body>

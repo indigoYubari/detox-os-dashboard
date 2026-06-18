@@ -1,23 +1,22 @@
 import {
+  BarChart2,
   Bot,
-  Compass,
+  Coins,
+  Cpu,
   FileText,
-  Headphones,
-  Inbox,
+  GitBranch,
+  HelpCircle,
   LayoutDashboard,
   ListChecks,
   type LucideIcon,
+  Map,
   Megaphone,
   MessageSquare,
-  Newspaper,
-  NotebookPen,
-  Receipt,
   Settings,
+  ShoppingBag,
   Sparkles,
   Star,
-  Store,
   Truck,
-  Workflow,
 } from "lucide-react"
 
 import { siteConfig } from "@/app/siteConfig"
@@ -40,11 +39,11 @@ export const navSections: NavSection[] = [
   {
     title: "Daglig",
     items: [
-      { name: "I dag", href: siteConfig.baseLinks.idag, icon: Inbox },
+      { name: "I dag", href: siteConfig.baseLinks.idag, icon: LayoutDashboard },
       {
         name: "Oversikt",
         href: siteConfig.baseLinks.overview,
-        icon: LayoutDashboard,
+        icon: BarChart2,
       },
     ],
   },
@@ -69,15 +68,19 @@ export const navSections: NavSection[] = [
           },
         ],
       },
-      { name: "Butikk", href: siteConfig.baseLinks.butikk, icon: Store },
+      { name: "Butikk", href: siteConfig.baseLinks.butikk, icon: ShoppingBag },
       {
         name: "Kundeservice",
         href: siteConfig.baseLinks.kundeservice,
-        icon: Headphones,
+        icon: MessageSquare,
       },
-      { name: "Anmeldelser", href: siteConfig.baseLinks.anmeldelser, icon: Star },
-      { name: "Innhold", href: siteConfig.baseLinks.innhold, icon: Newspaper },
-      { name: "Quiz", href: siteConfig.baseLinks.quiz, icon: ListChecks },
+      {
+        name: "Anmeldelser",
+        href: siteConfig.baseLinks.anmeldelser,
+        icon: Star,
+      },
+      { name: "Innhold", href: siteConfig.baseLinks.innhold, icon: FileText },
+      { name: "Quiz", href: siteConfig.baseLinks.quiz, icon: HelpCircle },
     ],
   },
   {
@@ -89,27 +92,19 @@ export const navSections: NavSection[] = [
         icon: Truck,
       },
       { name: "Agenter", href: siteConfig.baseLinks.agenter, icon: Bot },
-      { name: "Pipelines", href: siteConfig.baseLinks.pipelines, icon: Workflow },
       {
-        name: "AI-verktøy",
-        href: siteConfig.baseLinks.aiVerktoy,
-        icon: Sparkles,
+        name: "Pipelines",
+        href: siteConfig.baseLinks.pipelines,
+        icon: GitBranch,
       },
-      { name: "SOPs", href: siteConfig.baseLinks.sops, icon: FileText },
-    ],
-  },
-  {
-    title: "Kunnskap",
-    items: [
-      { name: "Notater", href: siteConfig.baseLinks.notater, icon: NotebookPen },
-      { name: "Roadmap", href: siteConfig.baseLinks.roadmap, icon: Compass },
-      { name: "Claude", href: siteConfig.baseLinks.claude, icon: MessageSquare },
+      { name: "AI-verktøy", href: siteConfig.baseLinks.aiVerktoy, icon: Cpu },
+      { name: "SOPs", href: siteConfig.baseLinks.sops, icon: ListChecks },
     ],
   },
   {
     title: "Virksomhet",
     items: [
-      { name: "Økonomi", href: siteConfig.baseLinks.okonomi, icon: Receipt },
+      { name: "Økonomi", href: siteConfig.baseLinks.okonomi, icon: Coins },
       {
         name: "Innstillinger",
         href: siteConfig.baseLinks.innstillinger,
@@ -117,4 +112,10 @@ export const navSections: NavSection[] = [
       },
     ],
   },
+]
+
+/** Festet nederst i sidebaren, over avataren. */
+export const navBottom: NavItem[] = [
+  { name: "Roadmap", href: siteConfig.baseLinks.roadmap, icon: Map },
+  { name: "Claude", href: siteConfig.baseLinks.claude, icon: Sparkles },
 ]

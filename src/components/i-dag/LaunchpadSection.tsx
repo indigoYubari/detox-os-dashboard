@@ -197,7 +197,10 @@ export function LaunchpadSection() {
       <div className="mt-4 space-y-6">
         {GROUPS.map((group) => (
           <div key={group.title}>
-            <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-gray-400">
+            <h3
+              className="jbm mb-2 text-[9px] uppercase text-[#1a3a4a]"
+              style={{ letterSpacing: "1.2px" }}
+            >
               {group.title}
             </h3>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

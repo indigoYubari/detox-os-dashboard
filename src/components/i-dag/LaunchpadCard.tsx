@@ -15,10 +15,21 @@ function isHttpLink(href?: string): boolean {
   return !!href && /^https?:\/\//i.test(href)
 }
 
+// Ikon-boksen fargekodes per flate: Claude teal, Claude Code lilla, resten noytral.
+function iconBoxStyle(name: string): React.CSSProperties {
+  if (name === "Claude") {
+    return { backgroundColor: "rgba(0,212,170,0.1)", color: "#00d4aa" }
+  }
+  if (name === "Claude Code") {
+    return { backgroundColor: "rgba(99,102,241,0.1)", color: "#6366f1" }
+  }
+  return { backgroundColor: "rgba(255,255,255,0.04)", color: "#2a5a6a" }
+}
+
 const cardClasses =
-  "group flex h-full items-start gap-3 rounded-xl border border-gray-200 bg-white p-4 transition-colors dark:border-gray-800 dark:bg-gray-900"
+  "group flex h-full items-start gap-3 rounded-[12px] border-[0.5px] border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-4 backdrop-blur-md transition-colors duration-150 ease-out"
 const interactiveClasses =
-  "hover:border-gray-300 hover:bg-gray-50/60 dark:hover:border-gray-700 dark:hover:bg-gray-800/40"
+  "hover:border-[rgba(0,212,170,0.2)] hover:bg-[rgba(0,212,170,0.02)]"
 
 /** A single launchpad tile: name, short note, and a hand-off into the tool. */
 export function LaunchpadCard({
@@ -30,23 +41,26 @@ export function LaunchpadCard({
   const body = (
     <>
       {Icon && (
-        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 transition-colors group-hover:bg-white dark:bg-gray-800 dark:text-gray-300 dark:group-hover:bg-gray-900">
+        <span
+          className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-[8px]"
+          style={iconBoxStyle(name)}
+        >
           <Icon className="size-[18px]" aria-hidden="true" />
         </span>
       )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-50">
+          <p className="truncate text-[13px] font-medium text-[#c0d4e0]">
             {name}
           </p>
           {href && (
             <ArrowUpRight
-              className="size-4 shrink-0 text-gray-300 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-gray-500 dark:text-gray-600 dark:group-hover:text-gray-400"
+              className="size-4 shrink-0 text-[#00d4aa] opacity-0 transition-opacity duration-150 group-hover:opacity-100"
               aria-hidden="true"
             />
           )}
         </div>
-        <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+        <p className="mt-0.5 text-[11px] leading-relaxed text-[#2a5a6a]">
           {note}
         </p>
       </div>
