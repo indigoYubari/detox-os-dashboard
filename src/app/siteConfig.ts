@@ -6,6 +6,7 @@ export const siteConfig = {
     home: "/",
     // Daglig
     idag: "/i-dag",
+    status: "/status",
     overview: "/overview",
     // Vekst
     annonser: "/annonser",

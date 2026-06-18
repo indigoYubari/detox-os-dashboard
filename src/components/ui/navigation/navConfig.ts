@@ -1,4 +1,5 @@
 import {
+  Activity,
   BarChart2,
   Bot,
   Coins,
@@ -40,6 +41,7 @@ export const navSections: NavSection[] = [
     title: "Daglig",
     items: [
       { name: "I dag", href: siteConfig.baseLinks.idag, icon: LayoutDashboard },
+      { name: "Status", href: siteConfig.baseLinks.status, icon: Activity },
       {
         name: "Oversikt",
         href: siteConfig.baseLinks.overview,
