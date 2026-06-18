@@ -40,6 +40,7 @@ type Client = {
   tests_received: string[] | null
   meeting_date: string | null
   notes: string | null
+  zoom_summary: string | null
   created_at: string
 }
 
@@ -128,7 +129,7 @@ export default function KliniskPage() {
     const { data, error: loadError } = await supabase
       .from("clients")
       .select(
-        "id, first_name, last_name_initial, status, tests_received, meeting_date, notes, created_at",
+        "id, first_name, last_name_initial, status, tests_received, meeting_date, notes, zoom_summary, created_at",
       )
       .order("created_at", { ascending: false })
 
@@ -345,6 +346,8 @@ function ExpandedPanel({
 }) {
   const [notes, setNotes] = useState(item.notes ?? "")
   const [savingNotes, setSavingNotes] = useState(false)
+  const [zoomSummary, setZoomSummary] = useState(item.zoom_summary ?? "")
+  const [savingZoom, setSavingZoom] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
 
   const received = item.tests_received ?? []
@@ -409,7 +412,24 @@ function ExpandedPanel({
     onUpdate({ ...item, notes: next })
   }
 
+  async function saveZoomSummary() {
+    setSavingZoom(true)
+    setPanelError(null)
+    const next = zoomSummary.trim() || null
+    const { error } = await supabase
+      .from("clients")
+      .update({ zoom_summary: next })
+      .eq("id", item.id)
+    setSavingZoom(false)
+    if (error) {
+      setPanelError(error.message)
+      return
+    }
+    onUpdate({ ...item, zoom_summary: next })
+  }
+
   const notesDirty = (notes.trim() || null) !== (item.notes ?? null)
+  const zoomDirty = (zoomSummary.trim() || null) !== (item.zoom_summary ?? null)
 
   return (
     <div className="border-t-[0.5px] border-[var(--os-border)] px-4 pb-4 pt-3">
@@ -516,6 +536,37 @@ function ExpandedPanel({
             disabled={!notesDirty}
           >
             Lagre notat
+          </Button>
+        </div>
+      </div>
+
+      {/* Zoom-referat */}
+      <div className="mt-4">
+        <span className="jbm text-[10px] uppercase tracking-wide text-[var(--os-text-muted)]">
+          Zoom-referat
+        </span>
+        <textarea
+          value={zoomSummary}
+          onChange={(e) => setZoomSummary(e.target.value)}
+          placeholder="Lim inn Zoom-referat her..."
+          rows={8}
+          className={cx(
+            "mt-1.5 block w-full rounded-md border px-2.5 py-1.5 text-sm shadow-sm outline-none transition",
+            "border-gray-300 bg-white text-gray-900 placeholder-gray-400",
+            "dark:border-gray-800 dark:bg-gray-950 dark:text-gray-50 dark:placeholder-gray-500",
+            "focus:ring-[var(--os-accent)]/20 focus:border-[var(--os-accent)] focus:ring-2",
+          )}
+        />
+        <div className="mt-2 flex justify-end">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void saveZoomSummary()}
+            isLoading={savingZoom}
+            loadingText="Lagrer"
+            disabled={!zoomDirty}
+          >
+            Lagre referat
           </Button>
         </div>
       </div>
