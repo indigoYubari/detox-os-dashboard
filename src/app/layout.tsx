@@ -1,12 +1,18 @@
 import type { Metadata } from "next"
 import { ThemeProvider } from "next-themes"
-import { Inter } from "next/font/google"
+import { Inter, JetBrains_Mono } from "next/font/google"
 import "./globals.css"
 
 const inter = Inter({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-inter",
+})
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-jetbrains",
 })
 
 import { Sidebar } from "@/components/ui/navigation/sidebar"
@@ -50,13 +56,17 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${inter.className} overflow-y-scroll scroll-auto antialiased selection:bg-indigo-100 selection:text-indigo-700 dark:bg-gray-950`}
+        className={`${inter.variable} ${jetbrainsMono.variable} overflow-y-scroll scroll-auto antialiased`}
         suppressHydrationWarning
       >
         <div className="mx-auto max-w-screen-2xl">
-          <ThemeProvider defaultTheme="system" attribute="class">
+          <ThemeProvider
+            defaultTheme="dark"
+            attribute="class"
+            enableSystem={false}
+          >
             <Sidebar />
-            <main className="lg:pl-72">{children}</main>
+            <main className="lg:pl-[56px]">{children}</main>
           </ThemeProvider>
         </div>
       </body>

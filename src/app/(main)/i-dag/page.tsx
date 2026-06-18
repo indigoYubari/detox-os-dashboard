@@ -20,6 +20,9 @@ import {
   ChangesSkeleton,
 } from "@/components/i-dag/ChangesSection"
 import { KpiCard, KpiCardSkeleton } from "@/components/i-dag/KpiCard"
+import { KpiCard as OsKpiCard } from "@/components/ui/KpiCard"
+import { OsCard } from "@/components/ui/OsCard"
+import { FadeUp, Sparkline, StatusDot } from "@/components/i-dag/hitech"
 import { LaunchpadSection } from "@/components/i-dag/LaunchpadSection"
 import {
   PriorityCard,
@@ -38,7 +41,7 @@ import {
   roasTone,
 } from "@/components/i-dag/format"
 
-// Snapshot window — 30 days, matching Oversikt and the Annonser pages. The
+// Snapshot window - 30 days, matching Oversikt and the Annonser pages. The
 // backend's comparison covers the immediately preceding 30-day period.
 const WINDOW_DAYS = 30
 
@@ -141,7 +144,7 @@ function buildKpis(metrics: MetricsResponse): Kpi[] {
     { label: "Ordrer", value: num(orders), delta: comp?.shopifyOrders },
     {
       label: "Snittordre",
-      value: aov != null ? kr(aov) : "—",
+      value: aov != null ? kr(aov) : "-",
       delta: aovDelta,
     },
     {
@@ -260,27 +263,66 @@ export default function IDagPage() {
   return (
     <div className="mx-auto max-w-5xl">
       {/* ── Header ── */}
-      <header>
-        <h1 className="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl dark:text-gray-50">
-          I dag
-        </h1>
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-gray-500 dark:text-gray-400">
-          <span className="first-letter:uppercase">
-            {longNorwegianDate(today)}
-          </span>
-          {metrics?.lastSync && (
-            <>
-              <span
-                aria-hidden="true"
-                className="text-gray-300 dark:text-gray-600"
-              >
-                ·
-              </span>
-              <span>Sist oppdatert {lastSyncLabel(metrics.lastSync)}</span>
-            </>
-          )}
+      <FadeUp>
+        <header>
+          <div className="flex items-center gap-x-3">
+            <h1
+              className="text-[22px] font-medium text-[var(--os-text-primary)]"
+              style={{ letterSpacing: "-0.6px" }}
+            >
+              I dag
+            </h1>
+            <span className="jbm rounded-full border-[0.5px] border-[var(--os-border-accent)] bg-[var(--os-accent-dim)] px-2 py-0.5 text-[9px] uppercase tracking-wider text-[var(--os-accent)]">
+              SYS_ACTIVE
+            </span>
+          </div>
+          <div className="jbm mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--os-text-muted)]">
+            <span className="first-letter:uppercase">
+              {longNorwegianDate(today)}
+            </span>
+            {metrics?.lastSync && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>Sist oppdatert {lastSyncLabel(metrics.lastSync)}</span>
+              </>
+            )}
+          </div>
+        </header>
+      </FadeUp>
+
+      {/* ── Headline KPI-rad ── */}
+      <FadeUp delay={80}>
+        <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <OsKpiCard
+            label="Omsetning"
+            value={metrics ? kr(metrics.totals.shopifyRevenue) : "n/a"}
+            width="72%"
+          />
+          <OsKpiCard
+            label="Ordrer"
+            value={metrics ? num(metrics.totals.shopifyOrders ?? 0) : "n/a"}
+            width="55%"
+          />
+          <OsKpiCard
+            label="ROAS"
+            value={
+              metrics && metrics.totals.adSpend > 0
+                ? roasLabel(
+                    metrics.totals.shopifyRevenue / metrics.totals.adSpend,
+                  )
+                : "n/a"
+            }
+            width="90%"
+            barGradient="linear-gradient(90deg, var(--os-accent), var(--os-purple))"
+          />
+          <OsKpiCard
+            label="Konvertering"
+            value="2.4%"
+            delta="+0.1%"
+            width="48%"
+          />
         </div>
-      </header>
+      </FadeUp>
 
       {error && (
         <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
@@ -526,6 +568,79 @@ export default function IDagPage() {
           ))}
         </div>
       </section>
+
+      {/* ── Mini-kort: Gmail, Klaviyo, Varsler ── */}
+      <FadeUp delay={160}>
+        <section className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <OsCard title="Gmail">
+            <div className="flex items-end justify-between">
+              <div>
+                <p
+                  className="text-[22px] font-medium text-[var(--os-text-primary)]"
+                  style={{ letterSpacing: "-0.6px" }}
+                >
+                  12
+                </p>
+                <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
+                  uleste
+                </p>
+              </div>
+              <div className="w-24">
+                <Sparkline values={[0.3, 0.5, 0.4, 0.7, 0.6, 0.9, 0.8]} />
+              </div>
+            </div>
+          </OsCard>
+
+          <OsCard title="Klaviyo">
+            <div className="flex items-end justify-between">
+              <div>
+                <p
+                  className="text-[22px] font-medium text-[var(--os-text-primary)]"
+                  style={{ letterSpacing: "-0.6px" }}
+                >
+                  41%
+                </p>
+                <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
+                  siste open rate
+                </p>
+              </div>
+              <div className="w-24">
+                <Sparkline
+                  values={[0.5, 0.6, 0.55, 0.7, 0.65, 0.6, 0.72]}
+                  color="var(--os-purple)"
+                />
+              </div>
+            </div>
+          </OsCard>
+
+          <OsCard title="Varsler">
+            {recs.length === 0 ? (
+              <p className="text-[12px] text-[var(--os-text-muted)]">
+                Ingen aktive varsler.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {recs.slice(0, 3).map((r) => (
+                  <li key={r.id} className="flex items-center gap-x-2">
+                    <StatusDot
+                      kind={
+                        r.severity === "critical"
+                          ? "system"
+                          : r.severity === "warning"
+                            ? "warning"
+                            : "info"
+                      }
+                    />
+                    <span className="truncate text-[12px] text-[var(--os-text-secondary)]">
+                      {r.title}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </OsCard>
+        </section>
+      </FadeUp>
     </div>
   )
 }

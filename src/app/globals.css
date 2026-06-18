@@ -1,3 +1,106 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ──────────────────────────────────────────────────────────────
+   detox.OS design system layer. Hi-tech. Alle sider arver dette.
+   ────────────────────────────────────────────────────────────── */
+:root {
+  --os-bg-base: #020508;
+  --os-bg-surface: rgba(2, 5, 8, 0.95);
+  --os-bg-card: rgba(255, 255, 255, 0.015);
+  --os-bg-hover: rgba(0, 212, 170, 0.03);
+  --os-bg-active: rgba(0, 212, 170, 0.08);
+  --os-border: rgba(255, 255, 255, 0.06);
+  --os-border-accent: rgba(0, 212, 170, 0.12);
+  --os-text-primary: #f0f4f8;
+  --os-text-secondary: #b0ccd8;
+  --os-text-muted: #2a5a6a;
+  --os-accent: #00d4aa;
+  --os-accent-dim: rgba(0, 212, 170, 0.1);
+  --os-accent-glow: rgba(0, 212, 170, 0.4);
+  --os-purple: #6366f1;
+  --os-purple-dim: rgba(99, 102, 241, 0.1);
+  --os-danger: #e05c5c;
+  --os-warning: #f59e0b;
+  --os-radius-sm: 7px;
+  --os-radius-md: 10px;
+  --os-radius-lg: 12px;
+  --os-transition: 150ms ease-out;
+  /* Alias slik at eldre referanser ikke knekker. */
+  --os-accent-border: rgba(0, 212, 170, 0.12);
+}
+
+/* Mørk base. Inter som standardfont (variabel settes i layout). */
+html,
+body {
+  background-color: var(--os-bg-base);
+  color: var(--os-text-primary);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* JetBrains Mono for breadcrumb, badges, kpi-labels, tid og mono-tekst. */
+.jbm {
+  font-family: var(--font-jetbrains), ui-monospace, "SFMono-Regular", monospace;
+}
+
+/* Titler: 500 weight, stram letter-spacing. */
+h1,
+h2,
+h3 {
+  font-weight: 500;
+}
+h1,
+h2 {
+  letter-spacing: -0.3px;
+}
+
+::selection {
+  background-color: var(--os-accent-dim);
+  color: var(--os-text-primary);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--os-border) transparent;
+}
+
+/* ── Animasjoner ── */
+@keyframes os-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes os-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+@keyframes os-pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 12px rgba(0, 212, 170, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(0, 212, 170, 0.5);
+  }
+}
+
+.fade-up {
+  animation: os-fade-up 0.5s ease both;
+}
+.animate-blink {
+  animation: os-blink 1.5s infinite;
+}
+.logo-glow {
+  animation: os-pulse-glow 3s infinite;
+}
