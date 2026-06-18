@@ -105,12 +105,6 @@ const timeFmt = new Intl.DateTimeFormat("nb-NO", {
 
 const AUTOSAVE_INTERVAL_MS = 30_000
 
-const ZOOM_SYSTEM_PROMPT =
-  "Du er en klinisk assistent for en funksjonell medisinpraktiker. Analyser dette Zoom-møtereferatet og returner: 1) Nøkkelpunkter fra møtet (bullet-liste), 2) Anbefalte oppfølgingstester, 3) Første utkast til protokoll med tiltak. Svar på norsk."
-
-type AnthropicTextBlock = { type: string; text?: string }
-type AnthropicResponse = { content?: AnthropicTextBlock[] }
-
 function displayName(client: Client): string {
   const initial = client.last_name_initial?.trim()
   return initial ? `${client.first_name} ${initial}.` : client.first_name
@@ -730,37 +724,18 @@ function FullscreenEditor({
     setAiError(null)
     setAnalysis(null)
     try {
-      const key = process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY
-      if (!key) {
-        setAiError("Mangler NEXT_PUBLIC_ANTHROPIC_API_KEY i miljøet.")
-        return
-      }
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      // Kaller egen server-route; Anthropic-nøkkelen ligger kun på serveren.
+      const res = await fetch("/api/analyser-referat", {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": key,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 2048,
-          system: ZOOM_SYSTEM_PROMPT,
-          messages: [{ role: "user", content: draft }],
-        }),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: draft }),
       })
+      const data = (await res.json()) as { analysis?: string; error?: string }
       if (!res.ok) {
-        const detail = await res.text()
-        setAiError(`API-feil (${res.status}): ${detail}`)
+        setAiError(data.error ?? `Serverfeil (${res.status}).`)
         return
       }
-      const data = (await res.json()) as AnthropicResponse
-      const text = (data.content ?? [])
-        .filter((b) => b.type === "text" && b.text)
-        .map((b) => b.text as string)
-        .join("\n")
-      setAnalysis(text || "Tomt svar fra API.")
+      setAnalysis(data.analysis ?? "Tomt svar fra API.")
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "Ukjent feil.")
     } finally {
@@ -837,7 +812,9 @@ function FullscreenEditor({
                   Analyserer referat…
                 </p>
               ) : aiError ? (
-                <p className="mt-2 text-sm text-[var(--os-danger)]">{aiError}</p>
+                <p className="mt-2 text-sm text-[var(--os-danger)]">
+                  {aiError}
+                </p>
               ) : (
                 <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[var(--os-text-secondary)]">
                   {analysis}
