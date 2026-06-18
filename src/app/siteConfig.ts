@@ -24,7 +24,6 @@ export const siteConfig = {
     leverandorer: "/leverandorer",
     agenter: "/agenter",
     pipelines: "/pipelines",
-    aiVerktoy: "/ai-verktoy",
     sops: "/sops",
     // Kunnskap
     notater: "/notater",

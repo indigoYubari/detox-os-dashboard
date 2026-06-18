@@ -6,11 +6,8 @@ import { siteConfig } from "@/app/siteConfig"
 import MobileSidebar from "./MobileSidebar"
 import { navBottom, navSections, type NavItem } from "./navConfig"
 
-const AI_HREF = siteConfig.baseLinks.aiVerktoy
-
-// Nav-rad med ikon + tekst. AI-verktoy faar lilla sekundaeraksent.
+// Nav-rad med ikon + tekst.
 function NavRow({ item, active }: { item: NavItem; active: boolean }) {
-  const isAi = item.href === AI_HREF
   return (
     <li>
       <Link
@@ -19,9 +16,7 @@ function NavRow({ item, active }: { item: NavItem; active: boolean }) {
           "flex items-center gap-x-[9px] rounded-[8px] px-[9px] py-[7px] text-[12px] transition-colors duration-150",
           active
             ? "bg-[rgba(0,212,170,0.08)] text-[#00d4aa] shadow-[inset_2px_0_0_var(--os-accent),0_0_8px_rgba(0,212,170,0.5)]"
-            : isAi
-              ? "bg-[rgba(99,102,241,0.08)] text-[#6366f1] hover:bg-[rgba(99,102,241,0.14)]"
-              : "text-[#2a5a6a] hover:bg-[rgba(255,255,255,0.04)] hover:text-[#7a9ab0]",
+            : "text-[#2a5a6a] hover:bg-[rgba(255,255,255,0.04)] hover:text-[#7a9ab0]",
           focusRing,
         )}
       >
