@@ -90,6 +90,70 @@ export type RecommendationsResponse = {
   }
 }
 
+export type ProposalStatus = "pending" | "approved" | "rejected" | "all"
+export type ProposalPriority = "critical" | "warning" | "info"
+export type ProposalExecutionStatus =
+  | "dry_run"
+  | "done"
+  | "failed"
+  | "skipped"
+  | null
+
+export type ProposalExecutionResult = {
+  dryRun?: boolean
+  done?: boolean
+  failed?: boolean
+  skipped?: boolean
+  error?: string
+  intendedAction?: {
+    channel?: string
+    recommendationType?: string
+    entityType?: string
+    entityId?: string | null
+    platformId?: string | null
+    operation?: string
+    target?: string
+    maxBudgetChangePctPerDay?: number
+  }
+  liveResult?: Record<string, unknown>
+}
+
+export type Proposal = {
+  id: string
+  channel: Channel
+  entity_type: string
+  entity_id: string | null
+  entity_name: string | null
+  recommendation_type: string
+  priority: ProposalPriority
+  current_roas: number | null
+  current_spend: number | null
+  suggested_action: string
+  ai_analysis: string | null
+  status: Exclude<ProposalStatus, "all">
+  created_at: string
+  decided_at: string | null
+  decided_by: string | null
+  executed_at: string | null
+  execution_status: ProposalExecutionStatus
+  execution_result: ProposalExecutionResult | null
+}
+
+export type ProposalsResponse = {
+  proposals: Proposal[]
+  counts: {
+    total: number
+    byPriority: Record<string, number>
+    byChannel: Record<string, number>
+    byType: Record<string, number>
+  }
+}
+
+export type ProposalDecisionResponse = {
+  proposal: Proposal
+  execution?: ProposalExecutionResult
+}
+
 export type TrendPoint = {
   date: string
   [key: string]: string | number
@@ -158,6 +222,25 @@ export type SearchTermsResponse = {
 }
 
 const BASE = "/api/detox"
+
+async function postJson(url: string, body: Record<string, unknown> = {}) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    let detail = `${res.status}`
+    try {
+      const j = await res.json()
+      if (j?.error) detail = j.error
+    } catch {
+      /* no json body */
+    }
+    throw new Error(detail)
+  }
+  return res.json()
+}
 
 export async function getMetrics(
   since?: string,
@@ -231,4 +314,38 @@ export async function getSearchTerms(
   })
   if (!res.ok) throw new Error(`Søketermer feilet: ${res.status}`)
   return res.json()
+}
+
+export async function getProposals(
+  params: {
+    status?: ProposalStatus
+    channel?: string
+    priority?: string
+    limit?: number
+  } = {},
+): Promise<ProposalsResponse> {
+  const qs = new URLSearchParams()
+  qs.set("status", params.status ?? "pending")
+  if (params.channel) qs.set("channel", params.channel)
+  if (params.priority) qs.set("priority", params.priority)
+  qs.set("limit", String(params.limit ?? 500))
+  const res = await fetch(`${BASE}/proposals?${qs}`, { cache: "no-store" })
+  if (!res.ok) throw new Error(`Forslag feilet: ${res.status}`)
+  return res.json()
+}
+
+export async function approveProposal(
+  id: string,
+): Promise<ProposalDecisionResponse> {
+  return postJson(`${BASE}/proposals/${encodeURIComponent(id)}/approve`, {
+    decided_by: "detox-os",
+  })
+}
+
+export async function rejectProposal(
+  id: string,
+): Promise<ProposalDecisionResponse> {
+  return postJson(`${BASE}/proposals/${encodeURIComponent(id)}/reject`, {
+    decided_by: "detox-os",
+  })
 }

@@ -48,6 +48,7 @@ import {
 import { cx } from "@/lib/utils"
 
 const ANBEFALINGER_HREF = "/annonser/anbefalinger"
+const FORSLAG_HREF = "/annonser/forslag"
 
 export default function AnnonserBriefing() {
   const today = new Date()
@@ -218,6 +219,13 @@ export default function AnnonserBriefing() {
             {openCount > 0 && (
               <span className="tabular-nums opacity-60">({openCount})</span>
             )}
+            <RiArrowRightLine className="size-4 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+          <Link
+            href={FORSLAG_HREF}
+            className="group inline-flex shrink-0 items-center gap-1 text-sm font-medium text-emerald-700 transition-colors hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300"
+          >
+            Handlingsforslag
             <RiArrowRightLine className="size-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>

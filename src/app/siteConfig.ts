@@ -13,6 +13,7 @@ export const siteConfig = {
     annonserKampanjer: "/annonser/kampanjer",
     annonserSoketermer: "/annonser/soketermer",
     annonserAnbefalinger: "/annonser/anbefalinger",
+    annonserForslag: "/annonser/forslag",
     annonserTrafikksegment: "/annonser/trafikksegment",
     butikk: "/butikk",
     kundeservice: "/kundeservice",
