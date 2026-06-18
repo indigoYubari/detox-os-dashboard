@@ -344,10 +344,6 @@ function ExpandedPanel({
   onClose: () => void
   onUpdate: (item: Client) => void
 }) {
-  const [notes, setNotes] = useState(item.notes ?? "")
-  const [savingNotes, setSavingNotes] = useState(false)
-  const [zoomSummary, setZoomSummary] = useState(item.zoom_summary ?? "")
-  const [savingZoom, setSavingZoom] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
 
   const received = item.tests_received ?? []
@@ -396,40 +392,23 @@ function ExpandedPanel({
     onUpdate({ ...item, meeting_date: next })
   }
 
-  async function saveNotes() {
-    setSavingNotes(true)
+  // Lagrer ett tekstfelt til Supabase. Returnerer feilmelding eller null.
+  async function saveField(
+    column: "notes" | "zoom_summary",
+    next: string | null,
+  ): Promise<string | null> {
     setPanelError(null)
-    const next = notes.trim() || null
     const { error } = await supabase
       .from("clients")
-      .update({ notes: next })
+      .update({ [column]: next })
       .eq("id", item.id)
-    setSavingNotes(false)
     if (error) {
       setPanelError(error.message)
-      return
+      return error.message
     }
-    onUpdate({ ...item, notes: next })
+    onUpdate({ ...item, [column]: next })
+    return null
   }
-
-  async function saveZoomSummary() {
-    setSavingZoom(true)
-    setPanelError(null)
-    const next = zoomSummary.trim() || null
-    const { error } = await supabase
-      .from("clients")
-      .update({ zoom_summary: next })
-      .eq("id", item.id)
-    setSavingZoom(false)
-    if (error) {
-      setPanelError(error.message)
-      return
-    }
-    onUpdate({ ...item, zoom_summary: next })
-  }
-
-  const notesDirty = (notes.trim() || null) !== (item.notes ?? null)
-  const zoomDirty = (zoomSummary.trim() || null) !== (item.zoom_summary ?? null)
 
   return (
     <div className="border-t-[0.5px] border-[var(--os-border)] px-4 pb-4 pt-3">
@@ -510,69 +489,134 @@ function ExpandedPanel({
       </div>
 
       {/* Notater */}
-      <div className="mt-4">
-        <span className="jbm text-[10px] uppercase tracking-wide text-[var(--os-text-muted)]">
-          Notater
-        </span>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Notater om klienten…"
-          rows={4}
-          className={cx(
-            "mt-1.5 block w-full rounded-md border px-2.5 py-1.5 text-sm shadow-sm outline-none transition",
-            "border-gray-300 bg-white text-gray-900 placeholder-gray-400",
-            "dark:border-gray-800 dark:bg-gray-950 dark:text-gray-50 dark:placeholder-gray-500",
-            "focus:ring-[var(--os-accent)]/20 focus:border-[var(--os-accent)] focus:ring-2",
-          )}
-        />
-        <div className="mt-2 flex justify-end">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => void saveNotes()}
-            isLoading={savingNotes}
-            loadingText="Lagrer"
-            disabled={!notesDirty}
-          >
-            Lagre notat
-          </Button>
-        </div>
-      </div>
+      <CollapsibleField
+        label="Notater"
+        value={item.notes}
+        placeholder="Notater om klienten…"
+        emptyText="Ingen notater ennå"
+        rows={4}
+        saveLabel="Lagre notat"
+        onSave={(next) => saveField("notes", next)}
+      />
 
       {/* Zoom-referat */}
-      <div className="mt-4">
-        <span className="jbm text-[10px] uppercase tracking-wide text-[var(--os-text-muted)]">
-          Zoom-referat
-        </span>
-        <textarea
-          value={zoomSummary}
-          onChange={(e) => setZoomSummary(e.target.value)}
-          placeholder="Lim inn Zoom-referat her..."
-          rows={8}
-          className={cx(
-            "mt-1.5 block w-full rounded-md border px-2.5 py-1.5 text-sm shadow-sm outline-none transition",
-            "border-gray-300 bg-white text-gray-900 placeholder-gray-400",
-            "dark:border-gray-800 dark:bg-gray-950 dark:text-gray-50 dark:placeholder-gray-500",
-            "focus:ring-[var(--os-accent)]/20 focus:border-[var(--os-accent)] focus:ring-2",
-          )}
-        />
-        <div className="mt-2 flex justify-end">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => void saveZoomSummary()}
-            isLoading={savingZoom}
-            loadingText="Lagrer"
-            disabled={!zoomDirty}
-          >
-            Lagre referat
-          </Button>
-        </div>
-      </div>
+      <CollapsibleField
+        label="Zoom-referat"
+        value={item.zoom_summary}
+        placeholder="Lim inn Zoom-referat her..."
+        emptyText="Ingen referat ennå"
+        rows={8}
+        saveLabel="Lagre referat"
+        onSave={(next) => saveField("zoom_summary", next)}
+      />
 
       {panelError && (
         <p className="mt-3 text-sm text-[var(--os-danger)]">{panelError}</p>
+      )}
+    </div>
+  )
+}
+
+function CollapsibleField({
+  label,
+  value,
+  placeholder,
+  emptyText,
+  rows,
+  saveLabel,
+  onSave,
+}: {
+  label: string
+  value: string | null
+  placeholder: string
+  emptyText: string
+  rows: number
+  saveLabel: string
+  onSave: (next: string | null) => Promise<string | null>
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [draft, setDraft] = useState(value ?? "")
+  const [saving, setSaving] = useState(false)
+
+  // Synk utkast med lagret verdi ved ekstern oppdatering (f.eks. etter lagring).
+  // Beholder upubliserte endringer ved kollaps, siden value da er uendret.
+  useEffect(() => {
+    setDraft(value ?? "")
+  }, [value])
+
+  const dirty = (draft.trim() || null) !== (value ?? null)
+  const hasValue = Boolean(value && value.trim())
+
+  async function save() {
+    setSaving(true)
+    await onSave(draft.trim() || null)
+    setSaving(false)
+  }
+
+  return (
+    <div className="mt-4">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="focus-visible:ring-[var(--os-accent)]/40 flex w-full items-center justify-between gap-2 rounded text-left outline-none focus-visible:ring-2"
+      >
+        <span className="jbm text-[10px] uppercase tracking-wide text-[var(--os-text-muted)]">
+          {label}
+        </span>
+        <span className="text-[10px] text-[var(--os-accent)]">
+          {expanded ? "Vis mindre" : "Vis mer"}
+        </span>
+      </button>
+
+      {expanded ? (
+        <>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={placeholder}
+            rows={rows}
+            className={cx(
+              "mt-1.5 block max-h-[28rem] w-full resize-y overflow-y-auto rounded-md border px-2.5 py-1.5 text-sm shadow-sm outline-none transition",
+              "border-gray-300 bg-white text-gray-900 placeholder-gray-400",
+              "dark:border-gray-800 dark:bg-gray-950 dark:text-gray-50 dark:placeholder-gray-500",
+              "focus:ring-[var(--os-accent)]/20 focus:border-[var(--os-accent)] focus:ring-2",
+            )}
+          />
+          <div className="mt-2 flex justify-end">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void save()}
+              isLoading={saving}
+              loadingText="Lagrer"
+              disabled={!dirty}
+            >
+              {saveLabel}
+            </Button>
+          </div>
+        </>
+      ) : (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setExpanded(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault()
+              setExpanded(true)
+            }
+          }}
+          className="focus-visible:ring-[var(--os-accent)]/40 mt-1.5 cursor-pointer rounded outline-none focus-visible:ring-2"
+        >
+          {hasValue ? (
+            <p className="line-clamp-3 whitespace-pre-wrap break-words text-sm leading-6 text-[var(--os-text-secondary)]">
+              {value}
+            </p>
+          ) : (
+            <p className="text-sm text-[var(--os-text-muted)]">{emptyText}</p>
+          )}
+        </div>
       )}
     </div>
   )
