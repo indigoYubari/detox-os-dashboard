@@ -62,6 +62,7 @@ export const navSections: NavSection[] = [
             name: "Anbefalinger",
             href: siteConfig.baseLinks.annonserAnbefalinger,
           },
+          { name: "Forslag", href: siteConfig.baseLinks.annonserForslag },
           {
             name: "Trafikksegment",
             href: siteConfig.baseLinks.annonserTrafikksegment,
