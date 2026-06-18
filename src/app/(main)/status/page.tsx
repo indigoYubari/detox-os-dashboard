@@ -35,7 +35,11 @@ function countClinical(
 
     if (row.meeting_date) {
       const meeting = new Date(row.meeting_date)
-      if (!Number.isNaN(meeting.getTime()) && meeting >= now && meeting <= horizon) {
+      if (
+        !Number.isNaN(meeting.getTime()) &&
+        meeting >= now &&
+        meeting <= horizon
+      ) {
         meetingsNext7Days += 1
       }
     }
@@ -264,7 +268,8 @@ function Badge({
       "border-[var(--os-accent)]/30 bg-[var(--os-accent-dim)] text-[var(--os-accent)]",
     offline:
       "border-[var(--os-danger)]/30 bg-[var(--os-danger)]/10 text-[var(--os-danger)]",
-    neutral: "border-[var(--os-border)] bg-[var(--os-bg-hover)] text-[var(--os-text-muted)]",
+    neutral:
+      "border-[var(--os-border)] bg-[var(--os-bg-hover)] text-[var(--os-text-muted)]",
   }
   return (
     <span
