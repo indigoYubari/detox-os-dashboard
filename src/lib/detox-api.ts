@@ -154,6 +154,16 @@ export type ProposalDecisionResponse = {
   execution?: ProposalExecutionResult
 }
 
+export type ProposalExecutionModeResponse = {
+  proposalExecution: {
+    enabled: boolean
+    mode: "dry_run" | "live"
+    label: string
+    env?: string
+    checked_at?: string
+  }
+}
+
 export type TrendPoint = {
   date: string
   [key: string]: string | number
@@ -331,6 +341,14 @@ export async function getProposals(
   qs.set("limit", String(params.limit ?? 500))
   const res = await fetch(`${BASE}/proposals?${qs}`, { cache: "no-store" })
   if (!res.ok) throw new Error(`Forslag feilet: ${res.status}`)
+  return res.json()
+}
+
+export async function getProposalExecutionMode(): Promise<ProposalExecutionModeResponse> {
+  const res = await fetch(`${BASE}/proposals/execution-status`, {
+    cache: "no-store",
+  })
+  if (!res.ok) throw new Error(`Execution-modus feilet: ${res.status}`)
   return res.json()
 }
 
