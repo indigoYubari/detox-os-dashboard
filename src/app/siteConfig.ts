@@ -8,6 +8,7 @@ export const siteConfig = {
     idag: "/i-dag",
     status: "/status",
     overview: "/overview",
+    oversikt: "/oversikt",
     // Vekst
     annonser: "/annonser",
     annonserKanaler: "/annonser/kanaler",

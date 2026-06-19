@@ -18,6 +18,7 @@ import {
   Sparkles,
   Star,
   Truck,
+  Zap,
 } from "lucide-react"
 
 import { siteConfig } from "@/app/siteConfig"
@@ -46,6 +47,11 @@ export const navSections: NavSection[] = [
         name: "Oversikt",
         href: siteConfig.baseLinks.overview,
         icon: BarChart2,
+      },
+      {
+        name: "Live",
+        href: siteConfig.baseLinks.oversikt,
+        icon: Zap,
       },
     ],
   },
