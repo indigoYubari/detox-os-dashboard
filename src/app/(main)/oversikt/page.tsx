@@ -96,17 +96,17 @@ export default function OversiktPage() {
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <KpiCard
-                label="Omsetning i dag"
+                label="Omsetning i dag" tooltip="Total salgsomsetning fra Shopify i dag. Inkluderer alle betalte ordrer."
                 value={loading ? "…" : kr(data?.shopify?.revenueToday ?? 0)}
                 width="80%"
               />
               <KpiCard
-                label="Ordrer i dag"
+                label="Ordrer i dag" tooltip="Antall fullforte ordrer i Shopify i dag."
                 value={loading ? "…" : num(data?.shopify?.orders ?? 0)}
                 width="55%"
               />
               <KpiCard
-                label="Snittordre"
+                label="Snittordre" tooltip="Gjennomsnittlig ordresum i dag. Omsetning delt pa antall ordrer."
                 value={loading ? "…" : kr(data?.shopify?.aov ?? 0)}
                 width="65%"
               />
@@ -123,7 +123,7 @@ export default function OversiktPage() {
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <KpiCard
-                label="E-post omsetning (7d)"
+                label="E-post omsetning (7d)" tooltip="Omsetning Klaviyo har tilskrevet e-postkampanjer og flows de siste 7 dagene."
                 value={loading ? "…" : kr(data?.klaviyo?.emailRevenue7d ?? 0)}
                 width="70%"
               />

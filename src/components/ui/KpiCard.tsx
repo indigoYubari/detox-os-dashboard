@@ -1,15 +1,17 @@
 "use client"
-
 import { useEffect, useState } from "react"
 import { cx } from "@/lib/utils"
+import { StatTooltip } from "@/components/ui/StatTooltip"
 
 type KpiCardProps = {
   label: string
   value: string | number
   delta?: string
+  /** Valgfri forklaring som vises i tooltip ved hover paa label. */
+  tooltip?: string
   /** Retning styrer fargen. Utledes fra delta hvis ikke satt. */
   trend?: "up" | "down"
-  /** Mål-bredde på bunn-progressbaren, f.eks. "72%". */
+  /** Maal-bredde paa bunn-progressbaren, f.eks. "72%". */
   width?: string
   /** Gradient for bunnlinjen. Default teal til transparent. */
   barGradient?: string
@@ -19,13 +21,14 @@ type KpiCardProps = {
 const DEFAULT_BAR = "linear-gradient(90deg, var(--os-accent), transparent)"
 
 /**
- * Hi-tech KPI-kort. Tynn gradient-linje øverst, animert progressbar nederst.
- * Mono label og delta, stor Inter-verdi. Glød på hover.
+ * Hi-tech KPI-kort. Tynn gradient-linje oeverst, animert progressbar nederst.
+ * Mono label og delta, stor Inter-verdi. Gloed paa hover.
  */
 export function KpiCard({
   label,
   value,
   delta,
+  tooltip,
   trend,
   width = "0%",
   barGradient = DEFAULT_BAR,
@@ -35,7 +38,6 @@ export function KpiCard({
   const deltaColor =
     direction === "down" ? "text-[var(--os-danger)]" : "text-[var(--os-accent)]"
 
-  // Animer bunnlinjen fra 0 til mål-bredde ved mount.
   const [barWidth, setBarWidth] = useState("0%")
   useEffect(() => {
     const id = requestAnimationFrame(() => setBarWidth(width))
@@ -65,9 +67,12 @@ export function KpiCard({
         }}
         aria-hidden="true"
       />
-
       <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
-        {label}
+        {tooltip ? (
+          <StatTooltip explanation={tooltip}>{label}</StatTooltip>
+        ) : (
+          label
+        )}
       </p>
       <p
         className="mt-1 text-[22px] font-medium leading-tight text-[var(--os-text-primary)]"
@@ -78,7 +83,6 @@ export function KpiCard({
       {delta && (
         <p className={cx("jbm mt-0.5 text-[10px]", deltaColor)}>{delta}</p>
       )}
-
       {/* Bunn-progressbar */}
       <span
         className="absolute bottom-0 left-0 h-0.5"

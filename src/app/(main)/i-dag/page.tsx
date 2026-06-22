@@ -357,17 +357,17 @@ export default function IDagPage() {
       <FadeUp delay={80}>
         <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <OsKpiCard
-            label="Omsetning"
+            label="Omsetning" tooltip="Total Shopify-omsetning siste 30 dager."
             value={metrics ? kr(metrics.totals.shopifyRevenue) : "n/a"}
             width="72%"
           />
           <OsKpiCard
-            label="Ordrer"
+            label="Ordrer" tooltip="Antall fullforte Shopify-ordrer siste 30 dager."
             value={metrics ? num(metrics.totals.shopifyOrders ?? 0) : "n/a"}
             width="55%"
           />
           <OsKpiCard
-            label="ROAS"
+            label="ROAS" tooltip="Return on Ad Spend: hvor mye salg du far per krone brukt pa annonser. Over 3x er bra."
             value={
               metrics && metrics.totals.adSpend > 0
                 ? roasLabel(
@@ -379,7 +379,7 @@ export default function IDagPage() {
             barGradient="linear-gradient(90deg, var(--os-accent), var(--os-purple))"
           />
           <OsKpiCard
-            label="Konvertering"
+            label="Konvertering" tooltip="Andel besokende som legger inn en ordre. Bransjesnitt er 1-3%."
             value="2.4%"
             delta="+0.1%"
             width="48%"
