@@ -1,4 +1,5 @@
 "use client"
+import { StatTooltip } from "@/components/ui/StatTooltip"
 
 import React from "react"
 
@@ -78,30 +79,30 @@ export default function ButikkPage() {
       <section className="mt-8">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
           <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Ordrer i dag</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400"><StatTooltip explanation="Antall fullforte Shopify-ordrer i dag.">Ordrer i dag</StatTooltip></p>
             <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-50">{STORE_KPIS.ordersToday}</p>
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Ordrer denne uka</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400"><StatTooltip explanation="Antall fullforte ordrer siden mandag denne uken.">Ordrer denne uka</StatTooltip></p>
             <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-50">{STORE_KPIS.ordersWeek}</p>
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Ordrer MTD</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400"><StatTooltip explanation="Ordrer month-to-date: totalt antall ordrer fra 1. i denne maneden til i dag.">Ordrer MTD</StatTooltip></p>
             <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-50">{STORE_KPIS.ordersMonth}</p>
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Omsetning i dag</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400"><StatTooltip explanation="Total salgsomsetning fra Shopify i dag.">Omsetning i dag</StatTooltip></p>
             <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-50">{kr(STORE_KPIS.revenueToday)}</p>
           </div>
           <div className="rounded-lg border border-green-200 bg-green-50 p-5 dark:border-green-800 dark:bg-green-950">
-            <p className="text-xs text-gray-600 dark:text-gray-400">Snittordre</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400"><StatTooltip explanation="Gjennomsnittlig ordresum. Omsetning delt pa antall ordrer.">Snittordre</StatTooltip></p>
             <p className="mt-2 text-2xl font-semibold text-green-700 dark:text-green-300">{kr(STORE_KPIS.avgOrderValue)}</p>
             <p className={`mt-1 text-xs ${aovChange >= 0 ? "text-green-600" : "text-red-500"}`}>
               {aovChange >= 0 ? "↑" : "↓"} {Math.abs(aovChange).toFixed(1)}%
             </p>
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Konvertering</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400"><StatTooltip explanation="Andel besokende som legger inn en ordre. Bransjesnitt er 1-3%.">Konvertering</StatTooltip></p>
             <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-50">{STORE_KPIS.conversionRate}%</p>
             <p className={`mt-1 text-xs ${crChange >= 0 ? "text-green-600" : "text-red-500"}`}>
               {crChange >= 0 ? "↑" : "↓"} {Math.abs(crChange).toFixed(1)}% · {STORE_KPIS.visitors7d.toLocaleString("nb-NO")} besøk/uke
