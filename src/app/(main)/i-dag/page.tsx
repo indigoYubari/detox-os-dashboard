@@ -22,7 +22,8 @@ import {
 import { KpiCard, KpiCardSkeleton } from "@/components/i-dag/KpiCard"
 import { KpiCard as OsKpiCard } from "@/components/ui/KpiCard"
 import { OsCard } from "@/components/ui/OsCard"
-import { FadeUp, Sparkline, StatusDot } from "@/components/i-dag/hitech"
+import { FadeUp, Sparkline } from "@/components/i-dag/hitech"
+import { cx } from "@/lib/utils"
 import { LaunchpadSection } from "@/components/i-dag/LaunchpadSection"
 import {
   PriorityCard,
@@ -163,6 +164,37 @@ function buildKpis(metrics: MetricsResponse): Kpi[] {
   ]
 }
 
+// ── Live mini-kort: typer for de tre API-rutene ──
+type GmailData = {
+  totalt_uleste: number
+  kategorier: { navn: string; antall: number }[]
+  mock?: boolean
+}
+type KlaviyoKampanje = {
+  kampanje_navn: string
+  open_rate: number
+  click_rate: number
+  sendt_dato: string | null
+  mock?: boolean
+}
+type ShopifyIDag = {
+  ordrer_i_dag: number
+  omsetning_i_dag: number
+  snitt_ordreverdi: number
+  valuta: string
+  mock?: boolean
+}
+
+// Deterministisk 7-stolpers sparkline-form fra et tall. Dekorativ - selve
+// hovedtallet er ekte; sparklinen gir kun visuell bevegelse.
+function sparkFromSeed(seed: number): number[] {
+  const base = Math.abs(Math.round(seed)) || 1
+  return Array.from({ length: 7 }, (_, i) => {
+    const v = Math.sin(base * 0.7 + i * 0.9) * 0.5 + 0.5
+    return 0.25 + v * 0.7
+  })
+}
+
 const PIPELINE_VARIANT: Record<
   string,
   "success" | "default" | "error" | "warning"
@@ -186,6 +218,36 @@ export default function IDagPage() {
   const [ops, setOps] = React.useState<OpsData | null>(null)
   const [opsLoading, setOpsLoading] = React.useState(true)
   const [opsError, setOpsError] = React.useState<string | null>(null)
+
+  // Live mini-kort. Feil vises aldri til bruker - rutene gir mock stille.
+  const [gmail, setGmail] = React.useState<GmailData | null>(null)
+  const [klaviyo, setKlaviyo] = React.useState<KlaviyoKampanje | null>(null)
+  const [shopifyToday, setShopifyToday] = React.useState<ShopifyIDag | null>(
+    null,
+  )
+
+  React.useEffect(() => {
+    let cancelled = false
+    async function loadCard<T>(
+      url: string,
+      set: (v: T) => void,
+    ): Promise<void> {
+      try {
+        const res = await fetch(url, { cache: "no-store" })
+        if (!res.ok) return
+        const json = (await res.json()) as T
+        if (!cancelled) set(json)
+      } catch {
+        // Stille - kortet beholder skeleton/forrige verdi.
+      }
+    }
+    loadCard<GmailData>("/api/gmail/uleste", setGmail)
+    loadCard<KlaviyoKampanje>("/api/klaviyo/siste-kampanje", setKlaviyo)
+    loadCard<ShopifyIDag>("/api/shopify/i-dag", setShopifyToday)
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   React.useEffect(() => {
     const since = format(subDays(today, WINDOW_DAYS), "yyyy-MM-dd")
@@ -569,78 +631,130 @@ export default function IDagPage() {
         </div>
       </section>
 
-      {/* ── Mini-kort: Gmail, Klaviyo, Varsler ── */}
+      {/* ── Live mini-kort: Gmail, Klaviyo, Shopify ── */}
       <FadeUp delay={160}>
         <section className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {/* Gmail: uleste + kategorier + sparkline */}
           <OsCard title="Gmail">
-            <div className="flex items-end justify-between">
-              <div>
-                <p
-                  className="text-[22px] font-medium text-[var(--os-text-primary)]"
-                  style={{ letterSpacing: "-0.6px" }}
-                >
-                  12
-                </p>
-                <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
-                  uleste
-                </p>
-              </div>
-              <div className="w-24">
-                <Sparkline values={[0.3, 0.5, 0.4, 0.7, 0.6, 0.9, 0.8]} />
-              </div>
-            </div>
-          </OsCard>
-
-          <OsCard title="Klaviyo">
-            <div className="flex items-end justify-between">
-              <div>
-                <p
-                  className="text-[22px] font-medium text-[var(--os-text-primary)]"
-                  style={{ letterSpacing: "-0.6px" }}
-                >
-                  41%
-                </p>
-                <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
-                  siste open rate
-                </p>
-              </div>
-              <div className="w-24">
-                <Sparkline
-                  values={[0.5, 0.6, 0.55, 0.7, 0.65, 0.6, 0.72]}
-                  color="var(--os-purple)"
-                />
-              </div>
-            </div>
-          </OsCard>
-
-          <OsCard title="Varsler">
-            {recs.length === 0 ? (
-              <p className="text-[12px] text-[var(--os-text-muted)]">
-                Ingen aktive varsler.
-              </p>
+            {gmail === null ? (
+              <MiniSkeleton withSpark />
             ) : (
-              <ul className="space-y-2">
-                {recs.slice(0, 3).map((r) => (
-                  <li key={r.id} className="flex items-center gap-x-2">
-                    <StatusDot
-                      kind={
-                        r.severity === "critical"
-                          ? "system"
-                          : r.severity === "warning"
-                            ? "warning"
-                            : "info"
-                      }
-                    />
-                    <span className="truncate text-[12px] text-[var(--os-text-secondary)]">
-                      {r.title}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <div className="flex items-end justify-between">
+                <div>
+                  <p
+                    className="text-[22px] font-medium text-[var(--os-text-primary)]"
+                    style={{ letterSpacing: "-0.6px" }}
+                  >
+                    {num(gmail.totalt_uleste)}
+                  </p>
+                  <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
+                    uleste
+                  </p>
+                  {gmail.kategorier.length > 0 && (
+                    <p className="mt-1 truncate text-[10px] text-[var(--os-text-secondary)]">
+                      {gmail.kategorier
+                        .filter((k) => k.antall > 0)
+                        .map((k) => `${k.navn} ${k.antall}`)
+                        .join(" · ")}
+                    </p>
+                  )}
+                </div>
+                <div className="w-24">
+                  <Sparkline values={sparkFromSeed(gmail.totalt_uleste)} />
+                </div>
+              </div>
+            )}
+          </OsCard>
+
+          {/* Klaviyo: siste kampanjes open rate + sparkline */}
+          <OsCard title="Klaviyo">
+            {klaviyo === null ? (
+              <MiniSkeleton withSpark />
+            ) : (
+              <div className="flex items-end justify-between">
+                <div>
+                  <p
+                    className="text-[22px] font-medium text-[var(--os-text-primary)]"
+                    style={{ letterSpacing: "-0.6px" }}
+                  >
+                    {Math.round(klaviyo.open_rate * 100)}%
+                  </p>
+                  <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
+                    siste open rate
+                  </p>
+                  <p className="mt-1 truncate text-[10px] text-[var(--os-text-secondary)]">
+                    {klaviyo.kampanje_navn} · klikk{" "}
+                    {(klaviyo.click_rate * 100).toFixed(1)}%
+                  </p>
+                </div>
+                <div className="w-24">
+                  <Sparkline
+                    values={sparkFromSeed(klaviyo.open_rate * 100)}
+                    color="var(--os-purple)"
+                  />
+                </div>
+              </div>
+            )}
+          </OsCard>
+
+          {/* Shopify: dagens ordrer + omsetning, teal på positive tall */}
+          <OsCard title="Shopify i dag">
+            {shopifyToday === null ? (
+              <MiniSkeleton />
+            ) : (
+              <div className="flex items-end justify-between">
+                <div>
+                  <p
+                    className={cx(
+                      "text-[22px] font-medium",
+                      shopifyToday.omsetning_i_dag > 0
+                        ? "text-[var(--os-accent)]"
+                        : "text-[var(--os-text-primary)]",
+                    )}
+                    style={{ letterSpacing: "-0.6px" }}
+                  >
+                    {kr(shopifyToday.omsetning_i_dag)}
+                  </p>
+                  <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
+                    omsetning i dag
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p
+                    className={cx(
+                      "text-[22px] font-medium",
+                      shopifyToday.ordrer_i_dag > 0
+                        ? "text-[var(--os-accent)]"
+                        : "text-[var(--os-text-primary)]",
+                    )}
+                    style={{ letterSpacing: "-0.6px" }}
+                  >
+                    {num(shopifyToday.ordrer_i_dag)}
+                  </p>
+                  <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
+                    ordrer
+                  </p>
+                </div>
+              </div>
             )}
           </OsCard>
         </section>
       </FadeUp>
+    </div>
+  )
+}
+
+// Pulserende grå skeleton mens et mini-kort laster.
+function MiniSkeleton({ withSpark = false }: { withSpark?: boolean }) {
+  return (
+    <div className="flex items-end justify-between">
+      <div className="space-y-2">
+        <div className="h-6 w-16 animate-pulse rounded bg-[var(--os-bg-hover)]" />
+        <div className="h-2 w-12 animate-pulse rounded bg-[var(--os-bg-hover)]" />
+      </div>
+      {withSpark && (
+        <div className="h-8 w-24 animate-pulse rounded bg-[var(--os-bg-hover)]" />
+      )}
     </div>
   )
 }
