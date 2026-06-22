@@ -4,6 +4,7 @@ import React from "react"
 import { subDays, format } from "date-fns"
 import { DateRange } from "react-day-picker"
 import { Filterbar } from "@/components/ui/overview/DashboardFilterbar"
+import { StatTooltip } from "@/components/ui/StatTooltip"
 import { ProgressBar } from "@/components/ProgressBar"
 import {
   getMetrics,
@@ -173,16 +174,17 @@ export default function TrafikksegmentPage() {
 
 // ── segment card ──────────────────────────────────────────────
 function SegmentCard({ segment: s }: { segment: TrafficSegment }) {
-  const metrics: { label: string; value: string; className?: string }[] = [
-    { label: "Spend", value: kr(s.spend) },
-    { label: "Omsetning", value: kr(s.revenue) },
+  const metrics: { label: string; value: string; className?: string; tooltip?: string }[] = [
+    { label: "Spend", value: kr(s.spend), tooltip: "Totalt annonseforbruk for dette trafikksegmentet i perioden." },
+    { label: "Omsetning", value: kr(s.revenue), tooltip: "Omsetning tilskrevet dette segmentet av annonseringsplattformen." },
     {
       label: "ROAS",
       value: roasLabel(s.roas),
       className: roasTextClass(s.roas),
+      tooltip: "Return on Ad Spend: omsetning delt pa forbruk. Over 3x er bra for detox.no.",
     },
-    { label: "Konverteringer", value: num(s.conversions) },
-    { label: "Rader", value: num(s.rows) },
+    { label: "Konverteringer", value: num(s.conversions), tooltip: "Antall kjop registrert for dette segmentet." },
+    { label: "Rader", value: num(s.rows), tooltip: "Antall datarader fra annonseringsplattformen. Gir et bilde av aktivitetsniva." },
   ]
 
   return (
@@ -199,7 +201,7 @@ function SegmentCard({ segment: s }: { segment: TrafficSegment }) {
       <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4">
         {metrics.map((m) => (
           <div key={m.label}>
-            <dt className="text-xs text-gray-400">{m.label}</dt>
+            <dt className="text-xs text-gray-400">{m.tooltip ? <StatTooltip explanation={m.tooltip}>{m.label}</StatTooltip> : m.label}</dt>
             <dd
               className={`mt-1 text-sm font-semibold tabular-nums ${
                 m.className ?? "text-gray-900 dark:text-gray-50"
