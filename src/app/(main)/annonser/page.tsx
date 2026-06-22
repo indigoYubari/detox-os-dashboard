@@ -46,6 +46,7 @@ import {
   validatedRoas,
 } from "@/lib/ad-format"
 import { cx } from "@/lib/utils"
+import { StatTooltip } from "@/components/ui/StatTooltip"
 
 const ANBEFALINGER_HREF = "/annonser/anbefalinger"
 const FORSLAG_HREF = "/annonser/forslag"
@@ -412,7 +413,9 @@ function ChannelHealthCard({
       <div className="mt-4 flex items-end justify-between">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-            Plattform-ROAS
+            <StatTooltip explanation="ROAS rapportert direkte fra annonseringsplattformen. Kan avvike fra Shopify-validert ROAS pga attribusjon.">
+              Plattform-ROAS
+            </StatTooltip>
           </p>
           <p
             className={cx(
@@ -427,7 +430,9 @@ function ChannelHealthCard({
         </div>
         <div className="text-right">
           <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-            Forbruk
+            <StatTooltip explanation="Totalt annonseforbruk pa denne kanalen i valgt periode.">
+              Forbruk
+            </StatTooltip>
           </p>
           <p className="mt-0.5 text-sm font-semibold tabular-nums text-gray-700 dark:text-gray-300">
             {kr(spend)}
