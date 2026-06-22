@@ -22,6 +22,7 @@ import {
 import { KpiCard, KpiCardSkeleton } from "@/components/i-dag/KpiCard"
 import { KpiCard as OsKpiCard } from "@/components/ui/KpiCard"
 import { OsCard } from "@/components/ui/OsCard"
+import { StatTooltip } from "@/components/ui/StatTooltip"
 import { FadeUp, Sparkline } from "@/components/i-dag/hitech"
 import { cx } from "@/lib/utils"
 import { LaunchpadSection } from "@/components/i-dag/LaunchpadSection"
@@ -167,7 +168,7 @@ function buildKpis(metrics: MetricsResponse): Kpi[] {
 // ── Live mini-kort: typer for de tre API-rutene ──
 type GmailData = {
   totalt_uleste: number
-  kategorier: { navn: string; antall: number }[]
+  kategorier: { navn: string; antall: number; tooltip?: string }[]
   mock?: boolean
 }
 type KlaviyoKampanje = {
@@ -651,12 +652,17 @@ export default function IDagPage() {
                     uleste
                   </p>
                   {gmail.kategorier.length > 0 && (
-                    <p className="mt-1 truncate text-[10px] text-[var(--os-text-secondary)]">
+                    <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
                       {gmail.kategorier
                         .filter((k) => k.antall > 0)
-                        .map((k) => `${k.navn} ${k.antall}`)
-                        .join(" · ")}
-                    </p>
+                        .map((k) => (
+                          <span key={k.navn} className="text-[10px] text-[var(--os-text-secondary)]">
+                            <StatTooltip explanation={k.tooltip ?? k.navn}>
+                              {k.navn} {k.antall}
+                            </StatTooltip>
+                          </span>
+                        ))}
+                    </div>
                   )}
                 </div>
                 <div className="w-24">
