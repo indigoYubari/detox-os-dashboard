@@ -171,9 +171,7 @@ export default function PipelinesPage() {
     }
     setProducts((prev) =>
       prev.map((p) =>
-        p.id === product.id
-          ? { ...p, status: next, updated_at: updatedAt }
-          : p,
+        p.id === product.id ? { ...p, status: next, updated_at: updatedAt } : p,
       ),
     )
   }
@@ -205,7 +203,7 @@ export default function PipelinesPage() {
               type="button"
               onClick={() => setFilter(active ? "alle" : s.value)}
               className={cx(
-                "rounded-[var(--os-radius-lg)] border-[0.5px] bg-[var(--os-bg-card)] p-4 text-left transition-colors duration-150 outline-none",
+                "rounded-[var(--os-radius-lg)] border-[0.5px] bg-[var(--os-bg-card)] p-4 text-left outline-none transition-colors duration-150",
                 "focus-visible:ring-[var(--os-accent)]/40 focus-visible:ring-2",
                 active
                   ? "border-[var(--os-border-accent)]"
@@ -330,7 +328,7 @@ function FilterPill({
       type="button"
       onClick={onClick}
       className={cx(
-        "rounded-full border-[0.5px] px-3 py-1 text-xs transition-colors duration-150 outline-none",
+        "rounded-full border-[0.5px] px-3 py-1 text-xs outline-none transition-colors duration-150",
         "focus-visible:ring-[var(--os-accent)]/40 focus-visible:ring-2",
         active
           ? "border-[var(--os-accent-border)] bg-[var(--os-bg-active)] text-[var(--os-accent)]"
@@ -380,9 +378,7 @@ function ProductRow({
       <div className="w-[11rem] shrink-0">
         <Select
           value={meta.value}
-          onValueChange={(v) =>
-            onChangeStatus(product, v as PipelineStatus)
-          }
+          onValueChange={(v) => onChangeStatus(product, v as PipelineStatus)}
           disabled={saving}
         >
           <SelectTrigger className="w-full">
@@ -416,7 +412,7 @@ function PagerButton({
       onClick={onClick}
       disabled={disabled}
       className={cx(
-        "rounded-[var(--os-radius-sm)] border-[0.5px] border-[var(--os-border)] px-2.5 py-1 transition-colors outline-none",
+        "rounded-[var(--os-radius-sm)] border-[0.5px] border-[var(--os-border)] px-2.5 py-1 outline-none transition-colors",
         "focus-visible:ring-[var(--os-accent)]/40 focus-visible:ring-2",
         disabled
           ? "cursor-not-allowed opacity-40"

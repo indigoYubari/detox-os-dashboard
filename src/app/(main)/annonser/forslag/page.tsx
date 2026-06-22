@@ -61,9 +61,12 @@ export default function ForslagPage() {
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [executionMode, setExecutionMode] =
-    useState<ProposalExecutionModeResponse["proposalExecution"] | null>(null)
-  const [executionModeError, setExecutionModeError] = useState<string | null>(null)
+  const [executionMode, setExecutionMode] = useState<
+    ProposalExecutionModeResponse["proposalExecution"] | null
+  >(null)
+  const [executionModeError, setExecutionModeError] = useState<string | null>(
+    null,
+  )
   const [executionModeLoading, setExecutionModeLoading] = useState(true)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -152,7 +155,9 @@ export default function ForslagPage() {
     setError(null)
     try {
       const res =
-        action === "approve" ? await approveProposal(id) : await rejectProposal(id)
+        action === "approve"
+          ? await approveProposal(id)
+          : await rejectProposal(id)
       setData((prev) => mergeDecision(prev, id, res))
       setToast(action === "approve" ? "Forslag godkjent" : "Forslag avvist")
     } catch (e) {
@@ -228,7 +233,10 @@ export default function ForslagPage() {
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <ChannelPill active={channel === "all"} onClick={() => setChannel("all")}>
+          <ChannelPill
+            active={channel === "all"}
+            onClick={() => setChannel("all")}
+          >
             Alle kanaler
           </ChannelPill>
           {channelEntries.map(([ch, n]) => (
@@ -366,10 +374,10 @@ function ProposalCard({
             {STATUS_LABEL[proposal.status] ?? proposal.status}
           </Badge>
         )}
-        <Badge variant="neutral">{labelFor(CHANNEL_LABELS, proposal.channel)}</Badge>
         <Badge variant="neutral">
-          {proposalDisplayName(proposal)}
+          {labelFor(CHANNEL_LABELS, proposal.channel)}
         </Badge>
+        <Badge variant="neutral">{proposalDisplayName(proposal)}</Badge>
         <Badge variant="neutral">
           {labelFor(TYPE_LABEL, proposal.recommendation_type)}
         </Badge>
@@ -400,7 +408,9 @@ function ProposalCard({
             {EXECUTION_LABEL[execution] ?? execution}
           </Badge>
           <span>{executionSummary(proposal.execution_result)}</span>
-          {proposal.executed_at && <span>{formatWhen(proposal.executed_at)}</span>}
+          {proposal.executed_at && (
+            <span>{formatWhen(proposal.executed_at)}</span>
+          )}
           {proposal.execution_result?.error && (
             <span className="text-red-600 dark:text-red-400">
               {proposal.execution_result.error}
@@ -522,7 +532,8 @@ function executionSummary(result: ProposalExecutionResult | null) {
       : action.operation === "pause"
         ? "Pause"
         : "Ingen handling"
-  const target = action.target ?? action.entityType ?? action.channel ?? "ukjent"
+  const target =
+    action.target ?? action.entityType ?? action.channel ?? "ukjent"
   const pct = action.maxBudgetChangePctPerDay
     ? ` · maks ${action.maxBudgetChangePctPerDay}%`
     : ""
