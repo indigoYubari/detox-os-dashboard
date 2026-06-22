@@ -2,6 +2,7 @@
 
 import React from "react"
 import { Badge } from "@/components/Badge"
+import { StatTooltip } from "@/components/ui/StatTooltip"
 import {
   getSearchTerms,
   type SearchTerm,
@@ -150,21 +151,21 @@ export default function SoketermerPage() {
       {/* ── Summary ── */}
       <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <SummaryCard
-          label="Søketermer"
+          label="Søketermer" tooltip="Totalt antall unike søketermer som har utløst annonsene dine i perioden."
           value={loading ? null : num(terms.length)}
         />
         <SummaryCard
-          label="Sløsing"
+          label="Sløsing" tooltip="Søketermer med høyt forbruk og null konverteringer. Bør legges til som negative søkeord."
           value={loading ? null : num(wastedCount)}
           tone="error"
         />
         <SummaryCard
-          label="Sterke"
+          label="Sterke" tooltip="Søketermer med ROAS over 4x. Disse driver lønsom trafikk og bør prioriteres."
           value={loading ? null : num(strongCount)}
           tone="success"
         />
         <SummaryCard
-          label="Forbruk på sløsing"
+          label="Forbruk på sløsing" tooltip="Totalt beløp brukt på søketermer klassifisert som sløsing. Potensielt besparelsespotensial."
           value={loading ? null : kr(wastedSpend)}
           tone={wastedSpend > 0 ? "error" : undefined}
         />
@@ -299,10 +300,12 @@ function SummaryCard({
   label,
   value,
   tone,
+  tooltip,
 }: {
   label: string
   value: string | null
   tone?: "error" | "success"
+  tooltip?: string
 }) {
   const valueClass =
     tone === "error"
@@ -312,7 +315,7 @@ function SummaryCard({
         : "text-gray-900 dark:text-gray-50"
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-      <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{tooltip ? <StatTooltip explanation={tooltip}>{label}</StatTooltip> : label}</p>
       {value == null ? (
         <div className="mt-2 h-6 w-16 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
       ) : (
