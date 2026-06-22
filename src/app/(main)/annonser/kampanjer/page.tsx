@@ -4,6 +4,7 @@ import React from "react"
 import { subDays, format } from "date-fns"
 import { DateRange } from "react-day-picker"
 import { Filterbar } from "@/components/ui/overview/DashboardFilterbar"
+import { StatTooltip } from "@/components/ui/StatTooltip"
 import { Badge } from "@/components/Badge"
 import { ProgressBar } from "@/components/ProgressBar"
 import {
@@ -203,19 +204,19 @@ function CampaignCard({ campaign: c }: { campaign: CampaignHealth }) {
           {/* metrics */}
           <div className="mt-5 grid grid-cols-3 gap-4">
             <div>
-              <p className="text-xs text-gray-400">Spend</p>
+              <p className="text-xs text-gray-400"><StatTooltip explanation="Totalt annonseforbruk for kampanjen i valgt periode.">Spend</StatTooltip></p>
               <p className="mt-1 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-50">
                 {kr(c.spend)}
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-400">Omsetning</p>
+              <p className="text-xs text-gray-400"><StatTooltip explanation="Omsetning tilskrevet denne kampanjen av Google Ads.">Omsetning</StatTooltip></p>
               <p className="mt-1 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-50">
                 {kr(c.revenue)}
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-400">ROAS</p>
+              <p className="text-xs text-gray-400"><StatTooltip explanation="Return on Ad Spend: omsetning delt pa forbruk. Over 3x er bra for detox.no.">ROAS</StatTooltip></p>
               <p className={`mt-1 text-sm font-semibold tabular-nums ${roasTextClass(c.roas)}`}>
                 {roasLabel(c.roas)}
               </p>
@@ -226,7 +227,7 @@ function CampaignCard({ campaign: c }: { campaign: CampaignHealth }) {
           {hasTempo && (
             <div className="mt-5">
               <div className="mb-1.5 flex items-center justify-between">
-                <span className="text-xs text-gray-400">Forbruk i dag</span>
+                <span className="text-xs text-gray-400"><StatTooltip explanation="Hvor mye av dagsbudsjettet som er brukt i dag. Over 100% betyr kampanjen er begrenset av budsjettet.">Forbruk i dag</StatTooltip></span>
                 <span className="text-xs font-medium tabular-nums text-gray-600 dark:text-gray-300">
                   {pct}%
                 </span>
