@@ -4,6 +4,7 @@ import React from "react"
 import { subDays, format } from "date-fns"
 import { DateRange } from "react-day-picker"
 import { Filterbar } from "@/components/ui/overview/DashboardFilterbar"
+import { StatTooltip } from "@/components/ui/StatTooltip"
 import {
   getMetrics,
   type ChannelMetrics,
@@ -182,17 +183,19 @@ function ChannelCard({
     label: string
     value: string
     delta?: DeltaValue
+    tooltip?: string
   }[] = [
-    { label: "Spend", value: kr(channel.spend), delta: comparison?.spend },
-    { label: "Omsetning", value: kr(channel.revenue), delta: comparison?.revenue },
-    { label: "ROAS", value: roasLabel(channel.roas), delta: comparison?.roas },
+    { label: "Spend", value: kr(channel.spend), delta: comparison?.spend, tooltip: "Totalt annonseforbruk pa denne kanalen i valgt periode." },
+    { label: "Omsetning", value: kr(channel.revenue), delta: comparison?.revenue, tooltip: "Omsetning tilskrevet denne kanalen. Kan inkludere plattformens egen attribusjon." },
+    { label: "ROAS", value: roasLabel(channel.roas), delta: comparison?.roas, tooltip: "Return on Ad Spend: omsetning delt pa forbruk. Over 3x er bra for detox.no." },
     {
       label: "Konverteringer",
       value: num(channel.conversions),
       delta: comparison?.conversions,
+      tooltip: "Antall kjop eller malehandlinger registrert av plattformen.",
     },
-    { label: "Klikk", value: num(channel.clicks) },
-    { label: "Visninger", value: num(channel.impressions) },
+    { label: "Klikk", value: num(channel.clicks), tooltip: "Antall klikk pa annonser i perioden." },
+    { label: "Visninger", value: num(channel.impressions), tooltip: "Antall ganger annonsene er vist til brukere." },
   ]
 
   return (
@@ -211,7 +214,9 @@ function ChannelCard({
       <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-6">
         {headline.map((m) => (
           <div key={m.label}>
-            <p className="text-xs text-gray-400">{m.label}</p>
+            <p className="text-xs text-gray-400">
+              {m.tooltip ? <StatTooltip explanation={m.tooltip}>{m.label}</StatTooltip> : m.label}
+            </p>
             <p className="mt-1 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-50">
               {m.value}
             </p>
