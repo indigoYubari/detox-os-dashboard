@@ -141,7 +141,8 @@ export async function GET() {
     }
 
     return NextResponse.json({ meldinger, totalt: meldinger.length, kategorier })
-  } catch {
+  } catch (err) {
+    console.error("[kundeservice] feil:", String(err))
     return NextResponse.json(MOCK, { status: 200 })
   }
 }
