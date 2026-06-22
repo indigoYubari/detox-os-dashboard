@@ -1,4 +1,5 @@
 "use client"
+import { StatTooltip } from "@/components/ui/StatTooltip"
 
 import React from "react"
 
@@ -40,12 +41,12 @@ export default function AnmeldelserPage() {
             <p className="mt-1 text-xs text-gray-500">{REVIEW_KPIS.totalReviews} anmeldelser totalt</p>
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Nye denne mnd</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400"><StatTooltip explanation="Antall nye anmeldelser mottatt denne maneden.">Nye denne mnd</StatTooltip></p>
             <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-50">{REVIEW_KPIS.newThisMonth}</p>
             <p className={`mt-1 text-xs ${newChange >= 0 ? "text-green-600" : "text-red-500"}`}>{newChange >= 0 ? "↑" : "↓"} {Math.abs(newChange).toFixed(0)}% vs forrige mnd</p>
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Svarprosent</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400"><StatTooltip explanation="Andel anmeldelser som har fatt et svar fra butikken. Hoy svarprosent styrker tilliten.">Svarprosent</StatTooltip></p>
             <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-50">{REVIEW_KPIS.responseRate}%</p>
             <p className="mt-1 text-xs text-gray-400">av alle anmeldelser besvart</p>
           </div>
