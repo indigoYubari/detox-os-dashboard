@@ -1,72 +1,86 @@
-<br />
-<div align="center">
+# Detox OS Dashboard
 
-<h1 align="center">
-  Tremor – Dashboard Template
-</h1>
+Intern operativ plattform for Detox.no.
 
-<h3 align="center">
-  <a href="https://dashboard-oss.tremor.so/overview">Preview OSS version</a> |
-  <a href="https://dashboard.tremor.so/overview">Preview full version</a> |
-  <a href="https://blocks.tremor.so/templates">Get full version</a>
-</h3>
+Detox OS er et Next.js-basert dashboard utviklet for å samle drift, kundeservice, leverandørstyring, SOP-er, automatiseringer og forretningsdata i ett grensesnitt.
 
-`Dashboard` is a SaaS application template from [Tremor](https://tremor.so). It's built
-using [`Tremor Raw`](https://raw.tremor.so/docs/getting-started/installation)
-and [Next.js](https://nextjs.org).
+## Hovedfunksjoner
 
-<br />
+- Leverandør- og kvalitetsstyring
+- Batch- og produksjonsoversikt
+- SOP-bibliotek (Standard Operating Procedures)
+- AI-agenter og automatiseringer
+- Pipeline-overvåkning
+- Integrasjon mot Supabase
+- Rollebasert autentisering
+- Operasjonelt dashboard for Detox.no
 
-[![Tremor Banner](public/og_github.jpg)](https://dashboard-oss.tremor.so/overview)
+## Teknologistack
 
-</div>
+- Next.js 14
+- React 18
+- TypeScript
+- Supabase
+- Tailwind CSS
+- Radix UI
+- Recharts
 
-<br />
+## Autentisering
 
-## Getting started
+Prosjektet bruker Supabase Authentication. Alle sider er beskyttet via middleware og krever innlogging.
 
-1. Install the dependencies. We recommend using pnpm. If you want to use `npm`,
-   just replace `pnpm` with `npm`.
+## Lokal utvikling
+
+### Installer avhengigheter
 
 ```bash
-pnpm install
+npm install
 ```
 
-2. Then, start the development server:
+### Start utviklingsserver
 
 ```bash
-pnpm run dev
+npm run dev
 ```
 
-3. Visit [http://localhost:3000](http://localhost:3000) in your browser to view
-   the template.
+Åpne http://localhost:3000
 
-## Notes
+## Miljøvariabler
 
-This project uses
-[`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to
-automatically optimize and load Inter, a custom Google Font.
+Opprett en `.env.local` fil:
 
-This project uses
-[`Tremor Raw`](https://raw.tremor.so/docs/getting-started/installation)
-components for the UI.
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+```
 
-## License
+## Database
 
-This site template is licensed under the
-[Apache 2.0 License](https://github.com/tremorlabs/tremor-dashboard-template?tab=License-1-ov-file#readme).
+Prosjektet bruker Supabase som primær database.
 
-## Learn more
+Seed-data kan lastes inn med:
 
-For a deeper understanding of the technologies used in this template, check out
-the resources listed below:
+```bash
+npm run seed
+```
 
-- [Tremor Raw](https://raw.tremor.so) - Tremor Raw documentation
-- [Tailwind CSS](https://tailwindcss.com) - A utility-first CSS framework
-- [Next.js](https://nextjs.org/docs) - Next.js documentation
-- [Radix UI](https://www.radix-ui.com) - Radix UI Website
-- [Recharts](https://recharts.org) - Recharts documentation and website
+Eksempler på datasett:
 
----
+- Suppliers
+- Batches
+- Agents
+- Pipelines
+- SOPs
 
-Copyright © 2024 Tremor Labs, Inc. All rights reserved.
+## Formål
+
+Målet med Detox OS er å fungere som et sentralt operativsystem for drift av Detox.no, inkludert innkjøp, markedsføring, økonomi, automatisering, kundeservice og intern dokumentasjon.
+
+## Deployment
+
+Prosjektet er designet for kontinuerlig deployment via moderne hosting-plattformer som Vercel.
+
+## Status
+
+Aktiv utvikling.
