@@ -4,18 +4,19 @@ Start here when working on Detox OS Dashboard.
 
 ## Core docs
 
-- [Architecture](architecture.md)
-- [Supabase](supabase.md)
-- [Agents](agents.md)
-- [Pipelines](pipelines.md)
-- [Deployment](deployment.md)
-- [Troubleshooting](troubleshooting.md)
+- [Architecture](./architecture.md)
+- [Supabase](./supabase.md)
+- [Agents](./agents.md)
+- [Pipelines](./pipelines.md)
+- [Deployment](./deployment.md)
+- [Troubleshooting](./troubleshooting.md)
 
 ## Repo-level docs
 
 - [README](../README.md)
 - [Contributing](../CONTRIBUTING.md)
 - [Changelog](../CHANGELOG.md)
+- [Security](../SECURITY.md)
 
 ## Recommended reading order
 
