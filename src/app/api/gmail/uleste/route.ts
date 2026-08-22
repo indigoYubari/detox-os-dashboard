@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { authorize, requireDetoxUser } from "@/lib/auth-server"
 
 // Uleste e-poster i innboksen for to kontoer (b2b + kontakt), kategorisert per avsender.
 // Fire kategorier: Kunder, Frakt og toll, Leverandorer, Andre.
@@ -174,6 +175,13 @@ async function fetchGmail(): Promise<GmailData> {
 }
 
 export async function GET() {
+  // Defense in depth: middleware beskytter allerede /api/*, men denne ruten
+  // skal ikke vaere avhengig av at den er riktig konfigurert. Se
+  // sessions/2026-08-22 - en feilplassert middleware.ts gjorde hele
+  // auth-laget inert uten at en eneste test feilet.
+  const denied = authorize(await requireDetoxUser(), "detox:read")
+  if (denied) return denied
+
   try {
     const data = await fetchGmail()
     return NextResponse.json(data, { status: 200 })

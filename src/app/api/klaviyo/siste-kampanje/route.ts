@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { authorize, requireDetoxUser } from "@/lib/auth-server"
 
 // Server-side route. Token leses fra env og forlater aldri serveren.
 // Henter siste e-postkampanje fra Klaviyo + open/click rate. Ved feil: mock.
@@ -138,6 +139,13 @@ async function fetchKlaviyo(): Promise<KampanjeData> {
 }
 
 export async function GET() {
+  // Defense in depth: middleware beskytter allerede /api/*, men denne ruten
+  // skal ikke vaere avhengig av at den er riktig konfigurert. Se
+  // sessions/2026-08-22 - en feilplassert middleware.ts gjorde hele
+  // auth-laget inert uten at en eneste test feilet.
+  const denied = authorize(await requireDetoxUser(), "detox:read")
+  if (denied) return denied
+
   try {
     const data = await fetchKlaviyo()
     return NextResponse.json(data, { status: 200 })
