@@ -11,6 +11,7 @@ Kjøring (inntil CLI-flyt er satt opp): Supabase SQL Editor på prosjektet
 | 0001_activity_events.sql | Append-only audit-tabell + RLS | KJØRT i prod 2026-08-22 |
 | 0002_clients_rls_lockdown.sql | P0: fjerner anon-tilgang til klinisk data | KJØRT i prod 2026-08-22 |
 | 0003_obsidian_sync_pipeline_lockdown.sql | P0 del 2: obsidian_sync speilet de samme kliniske feltene og var fortsatt anonymt lesbar etter 0002. Låser den + product_pipeline | KJØRT i prod 2026-08-22 |
+| 0004_roadmap_remove_anon_write.sql | Fjerner anon sine skrive-grants (inkl. TRUNCATE, som RLS ikke gater) på roadmap + roadmap_comments, beholder tilsiktet offentlig lesing/kommentering | KJØRT i prod 2026-08-22 |
 
 Etter kjøring: oppdater status-kolonnen her + CURRENT_STATE i detox-os-architecture,
 og verifiser med det nektede anon-kallet beskrevet i 0002.
