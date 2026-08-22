@@ -24,6 +24,11 @@ export const ROLE_SCOPES: Record<DetoxRole, DetoxScope[]> = {
 
 export const DEFAULT_SCOPES: DetoxScope[] = ["detox:read"]
 
+// Headeren en Custom GPT sender sin maskin-credential i. Ligger her, ikke i
+// gpt-auth.ts, fordi middleware kjorer i Edge-runtime og ikke kan importere
+// node:crypto / supabase-js.
+export const GPT_CREDENTIAL_HEADER = "x-detox-gpt-key"
+
 export function scopesForRole(role: unknown): DetoxScope[] {
   if (typeof role === "string" && role in ROLE_SCOPES) {
     return ROLE_SCOPES[role as DetoxRole]
