@@ -1,0 +1,130 @@
+# Detox API v1 - minimal OpenAPI-foundation for Custom GPT Actions.
+# Kun det som er implementert og verifisert. Ingen spekulative endepunkter.
+# Mutasjoner (approve) eksponeres IKKE i v1; se x-detox-notes nederst.
+openapi: 3.1.0
+info:
+  title: Detox API
+  version: 1.0.0
+  description: >
+    Autentisert API mot Detox OS. Brukes av dashboardet og (senere) Anniken/Kim
+    Custom GPT. Per-bruker-identitet via Supabase Auth. GPT er aldri system of
+    record og får aldri direkte databasetilgang.
+servers:
+  - url: https://os.detox.no
+security:
+  - detoxAuth: []
+paths:
+  /api/v1/me:
+    get:
+      operationId: getMe
+      summary: Hvem er jeg, og hva kan jeg gjøre?
+      responses:
+        "200":
+          description: Autentisert identitet og capabilities.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, role, scopes]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  email:
+                    type: [string, "null"]
+                  role:
+                    type: string
+                    enum: [admin, founder, operator, service, none]
+                  scopes:
+                    type: array
+                    items:
+                      type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+  /api/v1/approvals:
+    get:
+      operationId: listApprovals
+      summary: Hva venter på min godkjenning?
+      description: >
+        Ventende handlingsforslag (annonser) som krever menneskelig godkjenning.
+        Krever scope detox:read. Selve godkjenningen gjøres i Detox OS i v1.
+      responses:
+        "200":
+          description: Ventende godkjenninger, data-minimert.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [approvals, count]
+                properties:
+                  count:
+                    type: integer
+                  approvals:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, channel, type, priority, suggested_action, created_at]
+                      properties:
+                        id:
+                          type: string
+                        channel:
+                          type: string
+                        entity_name:
+                          type: [string, "null"]
+                        type:
+                          type: string
+                        priority:
+                          type: string
+                          enum: [critical, warning, info]
+                        suggested_action:
+                          type: string
+                        created_at:
+                          type: string
+                          format: date-time
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "502":
+          description: Bakenforliggende tjeneste utilgjengelig.
+components:
+  securitySchemes:
+    detoxAuth:
+      type: oauth2
+      description: >
+        Per-bruker OAuth mot Supabase Auth. Endelige authorize/token-URL-er
+        avhenger av OAuth-valget dokumentert i detox-os-architecture
+        docs/security.md (Supabase OAuth-server vs tynn egen bro) og settes
+        før Custom GPT lanseres.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://os.detox.no/api/v1/oauth/authorize
+          tokenUrl: https://os.detox.no/api/v1/oauth/token
+          scopes:
+            detox:read: Lese egne data og ventende godkjenninger
+            action:propose: Foreslå handlinger (aldri godkjenne)
+  responses:
+    Unauthenticated:
+      description: Ikke innlogget.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+              code: { type: string, const: unauthenticated }
+    Forbidden:
+      description: Mangler nødvendig scope.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+              code: { type: string, const: forbidden }
+              required_scope: { type: string }
+x-detox-notes: >
+  Designbeslutning (ADR-010): action:approve eksponeres ikke som GPT-scope i v1.
+  En fremtidig POST /api/v1/approvals/{id}/approve vil kreve action:approve
+  (kun menneskelige roller founder/admin), bekreftelsessteg i klienten, og
+  payload-hash-binding fra HITL-standarden før den legges til her.
