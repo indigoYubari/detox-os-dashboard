@@ -2,7 +2,11 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
-import { isApiPath, isPublicPath } from "@/lib/auth-policy"
+import {
+  GPT_CREDENTIAL_HEADER,
+  isApiPath,
+  isPublicPath,
+} from "@/lib/auth-policy"
 
 // Alt er beskyttet by default. Offentlige stier er en eksplisitt allow-list
 // (auth-policy.ts). API-stier får 401 JSON i stedet for redirect, slik at
@@ -12,6 +16,23 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   if (isPublicPath(pathname)) {
+    return NextResponse.next()
+  }
+
+  // Custom GPT-klienter har ingen Supabase-cookie. Requests som bærer
+  // GPT-headeren slippes videre til route handleren, som ER den som
+  // autentiserer dem (requireDetoxPrincipal -> sha256-verifisering).
+  //
+  // Dette er delegering, ikke tillit: en ugyldig credential blir avvist med
+  // 401 av ruten. At requesten når ruten er nettopp det som gjør at en
+  // GYLDIG GPT-identitet får 403 - ikke 401 - når den forsøker en operasjon
+  // utenfor sine scopes. Det er slicens viktigste negative test (mandatets
+  // §21/§22), og den ville vært umulig å skille fra "ikke innlogget" hvis
+  // middleware stoppet requesten her.
+  //
+  // Avgrenset til /api/*: sider har ingen maskinbruker og skal fortsatt
+  // redirecte til /login.
+  if (isApiPath(pathname) && request.headers.has(GPT_CREDENTIAL_HEADER)) {
     return NextResponse.next()
   }
 

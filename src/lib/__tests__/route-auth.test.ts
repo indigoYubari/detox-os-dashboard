@@ -52,11 +52,70 @@ describe("route-level auth (defense in depth)", () => {
       const source = readFileSync(full, "utf-8")
       // Middleware skal vaere ett lag, ikke eneste lag. En rute som kun er
       // trygg fordi middleware er riktig konfigurert, er ikke trygg.
+      //
+      // requireDetoxPrincipal er den nye inngangen: den autentiserer bade
+      // mennesker (cookie-sesjon) og maskiner (GPT-credential). Begge navn
+      // godtas, men ruten maa faktisk KALLE ett av dem.
+      //
+      // Import-linjene fjernes foer sjekken. En sabotasjetest 2026-08-22 viste
+      // at det ikke holder aa lete etter navnet: en rute der kallet var revet
+      // ut, men importen sto igjen, besto testen. Det er samme feilklasse som
+      // middleware-defekten - koden nevnes, men kjores ikke.
+      const withoutImports = source
+        .split("\n")
+        .filter((line) => !/^\s*(import|\s+[\w{},*]+ from)\b/.test(line))
+        .join("\n")
       expect(
-        source.includes("requireDetoxUser"),
-        `${rel} stoler kun paa middleware. Legg til requireDetoxUser, eller ` +
-          `foer ruten opp i UNPROTECTED_ROUTES med en begrunnelse.`,
+        /\b(requireDetoxUser|requireDetoxPrincipal)\s*\(/.test(withoutImports),
+        `${rel} stoler kun paa middleware. Kall requireDetoxPrincipal(), ` +
+          `eller foer ruten opp i UNPROTECTED_ROUTES med en begrunnelse.`,
       ).toBe(true)
     },
   )
+})
+
+// Middleware slipper requests med GPT-headeren videre til route handleren.
+// Det er en bevisst delegering - men den er kun trygg saa lenge handleren
+// faktisk verifiserer credentialen. Disse testene feiler hvis delegeringen
+// blir staaende igjen uten sin motpart.
+
+describe("GPT-maskinauth (delegering fra middleware)", () => {
+  const middleware = readFileSync(join(ROOT, "src/middleware.ts"), "utf-8")
+  const authServer = readFileSync(join(ROOT, "src/lib/auth-server.ts"), "utf-8")
+  const gptAuth = readFileSync(join(ROOT, "src/lib/gpt-auth.ts"), "utf-8")
+
+  it("middleware slipper kun API-stier videre paa GPT-headeren", () => {
+    // Sider har ingen maskinbruker og skal fortsatt redirecte til /login.
+    expect(middleware).toContain("GPT_CREDENTIAL_HEADER")
+    expect(middleware).toMatch(
+      /isApiPath\(pathname\)\s*&&\s*request\.headers\.has\(GPT_CREDENTIAL_HEADER\)/,
+    )
+  })
+
+  it("requireDetoxPrincipal verifiserer credentialen, ikke bare headeren", () => {
+    expect(authServer).toContain("authenticateGptRequest")
+    // Fallback til menneskelig sesjon maa fortsatt finnes, ellers ville
+    // dashboardet mistet sin egen auth.
+    expect(authServer).toContain("requireDetoxUser()")
+  })
+
+  it("verifiseringen er en hash-sammenligning, ikke en tilstedevaerelsessjekk", () => {
+    expect(gptAuth).toContain("sha256")
+    expect(gptAuth).toContain("timingSafeEqual")
+  })
+
+  it("maskinauth bruker aldri service_role-noekkelen", () => {
+    // Sjekker faktisk BRUK, ikke omtale: modulen forklarer i en kommentar
+    // hvorfor service_role er forbudt, og den forklaringen skal ikke felle
+    // testen. Kun et env-oppslag ville vaere et reelt funn.
+    expect(gptAuth).not.toMatch(/process\.env\.[A-Z_]*SERVICE_ROLE/)
+    expect(gptAuth).toContain("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+  })
+
+  it("ingen credential eller passord er hardkodet i kilden", () => {
+    // Kun env-oppslag - aldri en literal.
+    expect(gptAuth).toContain("process.env.KIM_GPT_CREDENTIAL_SHA256")
+    expect(gptAuth).toContain("process.env.KIM_GPT_SUPABASE_PASSWORD")
+    expect(gptAuth).not.toMatch(/CREDENTIAL_SHA256\s*=\s*["\']/)
+  })
 })
