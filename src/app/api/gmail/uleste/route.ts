@@ -1,29 +1,29 @@
 import { NextResponse } from "next/server"
 import { authorize, requireDetoxUser } from "@/lib/auth-server"
+import {
+  liveMeta,
+  NotConfiguredError,
+  sourceErrorResponse,
+  type LiveMeta,
+} from "@/lib/source-state"
 
 // Uleste e-poster i innboksen for to kontoer (b2b + kontakt), kategorisert per avsender.
 // Fire kategorier: Kunder, Frakt og toll, Leverandorer, Andre.
+//
+// Ruta faller IKKE tilbake til mock ved feil. Fram til 2026-08-25 returnerte
+// den 8 oppdiktede uleste fordelt paa fire kategorier med status 200 naar
+// OAuth-tokenet var utloept - og /i-dag rendret aldri mock-flagget.
 
 export const dynamic = "force-dynamic"
 
 type Kategori = { navn: string; antall: number; tooltip: string }
-type GmailData = {
+type GmailTall = {
   totalt_uleste: number
   kategorier: Kategori[]
   kontoer?: { b2b: number; kontakt: number }
-  mock?: true
 }
 
-const MOCK: GmailData = {
-  totalt_uleste: 8,
-  kategorier: [
-    { navn: "Kunder", antall: 5, tooltip: "E-post fra private kundeadresser som gmail.com og icloud.com. Disse trenger oftest rask respons." },
-    { navn: "Frakt og toll", antall: 1, tooltip: "Varsler fra fraktselskaper og tollmyndigheter. Inneholder sporingsnumre og leveringsstatus." },
-    { navn: "Leverandorer", antall: 1, tooltip: "E-post fra faste leverandorer og produsenter. Fakturaer og ordrebekreftelser." },
-    { navn: "Andre", antall: 1, tooltip: "Alt annet: Shopify-varsler, systemmail fra Railway, Resend, Google og annonseplattformer." },
-  ],
-  mock: true,
-}
+export type GmailData = GmailTall & LiveMeta
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
@@ -84,7 +84,11 @@ function kategoriForAvsender(from: string): string {
 }
 
 async function accessTokenFromRefresh(refreshToken: string): Promise<string> {
-  if (!CLIENT_ID || !CLIENT_SECRET) throw new Error("Mangler OAuth-konfig")
+  if (!CLIENT_ID || !CLIENT_SECRET) {
+    throw new NotConfiguredError(
+      "GOOGLE_CLIENT_ID eller GOOGLE_CLIENT_SECRET mangler i miljøet",
+    )
+  }
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -143,13 +147,25 @@ async function fetchForKonto(
   return { total: kategorisert, buckets }
 }
 
-async function fetchGmail(): Promise<GmailData> {
+async function fetchGmail(): Promise<GmailTall> {
   const tokens: string[] = []
   if (REFRESH_TOKEN_B2B) tokens.push(REFRESH_TOKEN_B2B)
   if (REFRESH_TOKEN_KONTAKT) tokens.push(REFRESH_TOKEN_KONTAKT)
-  if (tokens.length === 0) throw new Error("Ingen tokens")
+  if (tokens.length === 0) {
+    throw new NotConfiguredError("Ingen Gmail-refresh-tokens i miljøet")
+  }
 
   const results = await Promise.allSettled(tokens.map(fetchForKonto))
+
+  // Alle kontoene feilet: da har vi ingen tall, og skal si det. Tidligere ga
+  // dette 0 uleste - en tom innboks er noe helt annet enn en innboks vi ikke
+  // klarte aa lese.
+  if (results.every((r) => r.status === "rejected")) {
+    const foerste = results[0]
+    throw foerste.status === "rejected"
+      ? (foerste.reason as Error)
+      : new Error("Gmail feilet for alle kontoer")
+  }
 
   const b2bTotal = results[0]?.status === "fulfilled" ? results[0].value.total : 0
   const kontaktTotal = results[1]?.status === "fulfilled" ? results[1].value.total : 0
@@ -184,8 +200,11 @@ export async function GET() {
 
   try {
     const data = await fetchGmail()
-    return NextResponse.json(data, { status: 200 })
-  } catch {
-    return NextResponse.json(MOCK, { status: 200 })
+    return NextResponse.json<GmailData>(
+      { ...data, ...liveMeta("gmail") },
+      { status: 200 },
+    )
+  } catch (e) {
+    return sourceErrorResponse("gmail", e)
   }
 }

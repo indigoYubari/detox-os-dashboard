@@ -169,22 +169,26 @@ function buildKpis(metrics: MetricsResponse): Kpi[] {
 type GmailData = {
   totalt_uleste: number
   kategorier: { navn: string; antall: number; tooltip?: string }[]
-  mock?: boolean
 }
 type KlaviyoKampanje = {
   kampanje_navn: string
   open_rate: number
   click_rate: number
   sendt_dato: string | null
-  mock?: boolean
 }
 type ShopifyIDag = {
   ordrer_i_dag: number
   omsetning_i_dag: number
   snitt_ordreverdi: number
   valuta: string
-  mock?: boolean
 }
+
+// Rutene gir 503 (ikke konfigurert) eller 502 (kilden nede) i stedet for mock,
+// saa kortene har tre tilstander - ikke to. "Laster" og "ingen kilde" saa
+// tidligere helt like ut: begge var en skeleton som aldri ble til noe.
+type KildeFeil = "ikke_konfigurert" | "utilgjengelig"
+type Kilde<T> = { data: T | null; feil: KildeFeil | null }
+const LASTER: Kilde<never> = { data: null, feil: null }
 
 // Deterministisk 7-stolpers sparkline-form fra et tall. Dekorativ - selve
 // hovedtallet er ekte; sparklinen gir kun visuell bevegelse.
@@ -220,31 +224,39 @@ export default function IDagPage() {
   const [opsLoading, setOpsLoading] = React.useState(true)
   const [opsError, setOpsError] = React.useState<string | null>(null)
 
-  // Live mini-kort. Feil vises aldri til bruker - rutene gir mock stille.
-  const [gmail, setGmail] = React.useState<GmailData | null>(null)
-  const [klaviyo, setKlaviyo] = React.useState<KlaviyoKampanje | null>(null)
-  const [shopifyToday, setShopifyToday] = React.useState<ShopifyIDag | null>(
-    null,
-  )
+  // Live mini-kort. Alle tre viser feil aapent (2026-08-25) - ingen av rutene
+  // serverer lenger mock som om det var virkelighet.
+  const [gmail, setGmail] = React.useState<Kilde<GmailData>>(LASTER)
+  const [klaviyo, setKlaviyo] = React.useState<Kilde<KlaviyoKampanje>>(LASTER)
+  const [shopifyToday, setShopifyToday] =
+    React.useState<Kilde<ShopifyIDag>>(LASTER)
 
   React.useEffect(() => {
     let cancelled = false
+    // 503 = kilden er ikke konfigurert hos oss, 502 = kilden er nede.
+    // Alt annet enn 2xx er en feil vi skal vise, ikke skjule.
     async function loadCard<T>(
       url: string,
-      set: (v: T) => void,
+      set: (v: Kilde<T>) => void,
     ): Promise<void> {
       try {
         const res = await fetch(url, { cache: "no-store" })
-        if (!res.ok) return
-        const json = (await res.json()) as T
-        if (!cancelled) set(json)
+        if (cancelled) return
+        if (res.ok) {
+          set({ data: (await res.json()) as T, feil: null })
+          return
+        }
+        set({
+          data: null,
+          feil: res.status === 503 ? "ikke_konfigurert" : "utilgjengelig",
+        })
       } catch {
-        // Stille - kortet beholder skeleton/forrige verdi.
+        if (!cancelled) set({ data: null, feil: "utilgjengelig" })
       }
     }
-    loadCard<GmailData>("/api/gmail/uleste", setGmail)
-    loadCard<KlaviyoKampanje>("/api/klaviyo/siste-kampanje", setKlaviyo)
-    loadCard<ShopifyIDag>("/api/shopify/i-dag", setShopifyToday)
+    void loadCard<GmailData>("/api/gmail/uleste", setGmail)
+    void loadCard<KlaviyoKampanje>("/api/klaviyo/siste-kampanje", setKlaviyo)
+    void loadCard<ShopifyIDag>("/api/shopify/i-dag", setShopifyToday)
     return () => {
       cancelled = true
     }
@@ -637,7 +649,9 @@ export default function IDagPage() {
         <section className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {/* Gmail: uleste + kategorier + sparkline */}
           <OsCard title="Gmail">
-            {gmail === null ? (
+            {gmail.feil !== null ? (
+              <KildeFeilVisning feil={gmail.feil} kilde="Gmail" />
+            ) : gmail.data === null ? (
               <MiniSkeleton withSpark />
             ) : (
               <div className="flex items-end justify-between">
@@ -646,14 +660,14 @@ export default function IDagPage() {
                     className="text-[22px] font-medium text-[var(--os-text-primary)]"
                     style={{ letterSpacing: "-0.6px" }}
                   >
-                    {num(gmail.totalt_uleste)}
+                    {num(gmail.data.totalt_uleste)}
                   </p>
                   <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
                     uleste
                   </p>
-                  {gmail.kategorier.length > 0 && (
+                  {gmail.data.kategorier.length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
-                      {gmail.kategorier
+                      {gmail.data.kategorier
                         .filter((k) => k.antall > 0)
                         .map((k) => (
                           <span key={k.navn} className="text-[10px] text-[var(--os-text-secondary)]">
@@ -666,7 +680,7 @@ export default function IDagPage() {
                   )}
                 </div>
                 <div className="w-24">
-                  <Sparkline values={sparkFromSeed(gmail.totalt_uleste)} />
+                  <Sparkline values={sparkFromSeed(gmail.data.totalt_uleste)} />
                 </div>
               </div>
             )}
@@ -674,7 +688,9 @@ export default function IDagPage() {
 
           {/* Klaviyo: siste kampanjes open rate + sparkline */}
           <OsCard title="Klaviyo">
-            {klaviyo === null ? (
+            {klaviyo.feil !== null ? (
+              <KildeFeilVisning feil={klaviyo.feil} kilde="Klaviyo" />
+            ) : klaviyo.data === null ? (
               <MiniSkeleton withSpark />
             ) : (
               <div className="flex items-end justify-between">
@@ -683,19 +699,19 @@ export default function IDagPage() {
                     className="text-[22px] font-medium text-[var(--os-text-primary)]"
                     style={{ letterSpacing: "-0.6px" }}
                   >
-                    {Math.round(klaviyo.open_rate * 100)}%
+                    {Math.round(klaviyo.data.open_rate * 100)}%
                   </p>
                   <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
                     siste open rate
                   </p>
                   <p className="mt-1 truncate text-[10px] text-[var(--os-text-secondary)]">
-                    {klaviyo.kampanje_navn} · klikk{" "}
-                    {(klaviyo.click_rate * 100).toFixed(1)}%
+                    {klaviyo.data.kampanje_navn} · klikk{" "}
+                    {(klaviyo.data.click_rate * 100).toFixed(1)}%
                   </p>
                 </div>
                 <div className="w-24">
                   <Sparkline
-                    values={sparkFromSeed(klaviyo.open_rate * 100)}
+                    values={sparkFromSeed(klaviyo.data.open_rate * 100)}
                     color="var(--os-purple)"
                   />
                 </div>
@@ -705,7 +721,9 @@ export default function IDagPage() {
 
           {/* Shopify: dagens ordrer + omsetning, teal på positive tall */}
           <OsCard title="Shopify i dag">
-            {shopifyToday === null ? (
+            {shopifyToday.feil !== null ? (
+              <KildeFeilVisning feil={shopifyToday.feil} kilde="Shopify" />
+            ) : shopifyToday.data === null ? (
               <MiniSkeleton />
             ) : (
               <div className="flex items-end justify-between">
@@ -713,13 +731,13 @@ export default function IDagPage() {
                   <p
                     className={cx(
                       "text-[22px] font-medium",
-                      shopifyToday.omsetning_i_dag > 0
+                      shopifyToday.data.omsetning_i_dag > 0
                         ? "text-[var(--os-accent)]"
                         : "text-[var(--os-text-primary)]",
                     )}
                     style={{ letterSpacing: "-0.6px" }}
                   >
-                    {kr(shopifyToday.omsetning_i_dag)}
+                    {kr(shopifyToday.data.omsetning_i_dag)}
                   </p>
                   <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
                     omsetning i dag
@@ -729,13 +747,13 @@ export default function IDagPage() {
                   <p
                     className={cx(
                       "text-[22px] font-medium",
-                      shopifyToday.ordrer_i_dag > 0
+                      shopifyToday.data.ordrer_i_dag > 0
                         ? "text-[var(--os-accent)]"
                         : "text-[var(--os-text-primary)]",
                     )}
                     style={{ letterSpacing: "-0.6px" }}
                   >
-                    {num(shopifyToday.ordrer_i_dag)}
+                    {num(shopifyToday.data.ordrer_i_dag)}
                   </p>
                   <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
                     ordrer
@@ -751,6 +769,31 @@ export default function IDagPage() {
 }
 
 // Pulserende grå skeleton mens et mini-kort laster.
+/**
+ * Vises naar en kilde ikke kan leses. Bevisst ordknapp og uten tall - poenget
+ * er at kortet aldri skal kunne forveksles med en maaling.
+ */
+function KildeFeilVisning({
+  feil,
+  kilde,
+}: {
+  feil: KildeFeil
+  kilde: string
+}) {
+  return (
+    <div className="text-[11px] leading-snug text-red-400">
+      <p className="font-medium">
+        {feil === "ikke_konfigurert"
+          ? `${kilde} ikke koblet til`
+          : `${kilde} utilgjengelig`}
+      </p>
+      <p className="jbm mt-1 text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
+        ingen tall å vise
+      </p>
+    </div>
+  )
+}
+
 function MiniSkeleton({ withSpark = false }: { withSpark?: boolean }) {
   return (
     <div className="flex items-end justify-between">
