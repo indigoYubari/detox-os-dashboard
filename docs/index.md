@@ -10,6 +10,7 @@ Start here when working on Detox OS Dashboard.
 - [Pipelines](./pipelines.md)
 - [Deployment](./deployment.md)
 - [Troubleshooting](./troubleshooting.md)
+- [Indigo Research Prompt](./indigo-research-prompt.md)
 
 ## Repo-level docs
 
