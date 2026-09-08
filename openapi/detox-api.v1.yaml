@@ -1,130 +1,219 @@
-# Detox API v1 - minimal OpenAPI-foundation for Custom GPT Actions.
-# Kun det som er implementert og verifisert. Ingen spekulative endepunkter.
-# Mutasjoner (approve) eksponeres IKKE i v1; se x-detox-notes nederst.
 openapi: 3.1.0
 info:
   title: Detox API
-  version: 1.0.0
+  version: 1.1.0
   description: >
-    Autentisert API mot Detox OS. Brukes av dashboardet og (senere) Anniken/Kim
-    Custom GPT. Per-bruker-identitet via Supabase Auth. GPT er aldri system of
-    record og får aldri direkte databasetilgang.
+    Autentisert API mot Detox OS. Brukes av dashboardet og av Custom GPT-klienter
+    (Kim GPT, senere Anniken GPT).
+
+    Custom GPT-er autentiserer med en unik, opak maskin-credential per GPT-klient
+    - ikke med en menneskelig innlogging. Kim og Anniken deler én ChatGPT-konto,
+    så ChatGPT-innloggingen kan aldri brukes som bevis på hvilket menneske som
+    skrev en melding. Serveren mapper credentialen til en egen
+    maskinidentitet (principal) med rollen `service`.
+
+    GPT er aldri system of record, får aldri direkte databasetilgang, får aldri
+    skrive- eller godkjenningsrettigheter, og får aldri klinisk data.
+
 servers:
   - url: https://os.detox.no
+
 security:
-  - detoxAuth: []
+  - detoxGptKey: []
+
+components:
+  securitySchemes:
+    detoxGptKey:
+      type: apiKey
+      in: header
+      name: X-Detox-GPT-Key
+      description: >
+        Unik opak credential per GPT-klient. Verifiseres server-side mot en
+        lagret sha256-hash og mappes til en maskinidentitet med rollen
+        `service` (scopes: detox:read, action:propose). Roterbar og
+        revokerbar uten kodeendring.
+
+  schemas:
+    PriorityItem:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: [string, "null"] }
+        category: { type: [string, "null"] }
+        area: { type: [string, "null"] }
+        target_date: { type: [string, "null"] }
+
+    Error:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          enum:
+            - unauthenticated
+            - forbidden
+            - backend_error
+            - backend_unavailable
+            - capability_unavailable
+            - query_failed
+        required_scope:
+          type: string
+
+  responses:
+    Unauthorized:
+      description: Mangler eller ugyldig credential.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Autentisert, men mangler nødvendig scope.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
 paths:
   /api/v1/me:
     get:
       operationId: getMe
-      summary: Hvem er jeg, og hva kan jeg gjøre?
+      summary: Hvilken kontekst har jeg, og hva har jeg lov til?
+      description: >
+        Returnerer maskinidentiteten forespørselen kom fra (principal),
+        hvilket menneske GPT-en er konfigurert for (configured_for), og hvilke
+        scopes identiteten har. configured_for er kontekst - aldri bevis for at
+        personen selv utførte handlingen.
       responses:
         "200":
-          description: Autentisert identitet og capabilities.
+          description: Identitet og capabilities.
           content:
             application/json:
               schema:
                 type: object
-                required: [id, role, scopes]
                 properties:
-                  id:
+                  principal:
                     type: string
-                    format: uuid
-                  email:
+                    examples: ["kim-gpt"]
+                  actor_type:
+                    type: string
+                    enum: [human, service]
+                  configured_for:
                     type: [string, "null"]
+                    examples: ["kim"]
                   role:
                     type: string
-                    enum: [admin, founder, operator, service, none]
+                    examples: ["service"]
                   scopes:
                     type: array
-                    items:
-                      type: string
+                    items: { type: string }
+                  identity_note:
+                    type: [string, "null"]
         "401":
-          $ref: "#/components/responses/Unauthenticated"
-  /api/v1/approvals:
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/priorities:
     get:
-      operationId: listApprovals
-      summary: Hva venter på min godkjenning?
+      operationId: getPriorities
+      summary: Hva står på roadmap-tavlen nå?
       description: >
-        Ventende handlingsforslag (annonser) som krever menneskelig godkjenning.
-        Krever scope detox:read. Selve godkjenningen gjøres i Detox OS i v1.
+        Statusoversikt over Detox' roadmap. Tavlen har ingen prioritetsverdier
+        eller måldatoer, så priority_available er false og listene er uordnet.
+        board_last_changed sier når tavlen sist ble endret. Presenter som
+        statusoversikt, aldri som prioritert liste. Rangér aldri selv.
       responses:
         "200":
-          description: Ventende godkjenninger, data-minimert.
+          description: Roadmap-status, gruppert.
           content:
             application/json:
               schema:
                 type: object
-                required: [approvals, count]
                 properties:
-                  count:
-                    type: integer
-                  approvals:
+                  data_source: { type: string, enum: [live] }
+                  source: { type: string }
+                  total: { type: integer }
+                  counts:
+                    type: object
+                    properties:
+                      in_progress: { type: integer }
+                      planned: { type: integer }
+                      recently_completed: { type: integer }
+                  groups:
+                    type: object
+                    properties:
+                      in_progress: { type: array, items: { $ref: "#/components/schemas/PriorityItem" } }
+                      planned: { type: array, items: { $ref: "#/components/schemas/PriorityItem" } }
+                      recently_completed: { type: array, items: { $ref: "#/components/schemas/PriorityItem" } }
+                  priority_available: { type: boolean }
+                  ordering: { type: string }
+                  board_last_changed: { type: [string, "null"], format: date-time }
+                  caveat: { type: string }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/recommendations:
+    get:
+      operationId: listRecommendations
+      summary: Hva har annonsemotoren flagget som verdt å se på?
+      description: >
+        Åpne anbefalinger fra Detox' annonsemotor, sortert på alvorlighetsgrad
+        og deretter alder. Dette er observasjoner, ikke handlingsforslag som
+        venter på godkjenning - omtal dem aldri som noe som skal godkjennes.
+        generated_latest viser hvor ferske dataene er. Krever scope detox:read.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - name: channel
+          in: query
+          required: false
+          schema: { type: string, examples: ["google_ads"] }
+      responses:
+        "200":
+          description: Åpne anbefalinger med ferskhetsmetadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data_source: { type: string, enum: [live] }
+                  source: { type: string }
+                  generated_latest: { type: [string, "null"], format: date-time }
+                  generated_oldest: { type: [string, "null"], format: date-time }
+                  counts:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      by_severity: { type: object, additionalProperties: { type: integer } }
+                      by_channel: { type: object, additionalProperties: { type: integer } }
+                  returned: { type: integer }
+                  truncated: { type: boolean }
+                  recommendations:
                     type: array
                     items:
                       type: object
-                      required: [id, channel, type, priority, suggested_action, created_at]
                       properties:
-                        id:
-                          type: string
-                        channel:
-                          type: string
-                        entity_name:
-                          type: [string, "null"]
-                        type:
-                          type: string
-                        priority:
-                          type: string
-                          enum: [critical, warning, info]
-                        suggested_action:
-                          type: string
-                        created_at:
-                          type: string
-                          format: date-time
+                        id: { type: string }
+                        channel: { type: string }
+                        entity: { type: [string, "null"] }
+                        type: { type: string }
+                        severity: { type: string, enum: [critical, warning, info] }
+                        title: { type: string }
+                        created_at: { type: string, format: date-time }
+                  caveat: { type: string }
         "401":
-          $ref: "#/components/responses/Unauthenticated"
+          $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
         "502":
-          description: Bakenforliggende tjeneste utilgjengelig.
-components:
-  securitySchemes:
-    detoxAuth:
-      type: oauth2
-      description: >
-        Per-bruker OAuth mot Supabase Auth. Endelige authorize/token-URL-er
-        avhenger av OAuth-valget dokumentert i detox-os-architecture
-        docs/security.md (Supabase OAuth-server vs tynn egen bro) og settes
-        før Custom GPT lanseres.
-      flows:
-        authorizationCode:
-          authorizationUrl: https://os.detox.no/api/v1/oauth/authorize
-          tokenUrl: https://os.detox.no/api/v1/oauth/token
-          scopes:
-            detox:read: Lese egne data og ventende godkjenninger
-            action:propose: Foreslå handlinger (aldri godkjenne)
-  responses:
-    Unauthenticated:
-      description: Ikke innlogget.
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              error: { type: string }
-              code: { type: string, const: unauthenticated }
-    Forbidden:
-      description: Mangler nødvendig scope.
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              error: { type: string }
-              code: { type: string, const: forbidden }
-              required_scope: { type: string }
-x-detox-notes: >
-  Designbeslutning (ADR-010): action:approve eksponeres ikke som GPT-scope i v1.
-  En fremtidig POST /api/v1/approvals/{id}/approve vil kreve action:approve
-  (kun menneskelige roller founder/admin), bekreftelsessteg i klienten, og
-  payload-hash-binding fra HITL-standarden før den legges til her.
+          description: Annonsemotoren er utilgjengelig. Ingen mock-fallback.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { authorize, requireDetoxUser } from "@/lib/auth-server"
+import { authorize, requireDetoxPrincipal } from "@/lib/auth-server"
 
 // Server-side route. Token leses fra env og forlater aldri serveren.
 // Henter dagens ordrer fra Shopify Admin API. Ved feil: myk fallback til mock.
@@ -94,7 +94,7 @@ export async function GET() {
   // skal ikke vaere avhengig av at den er riktig konfigurert. Se
   // sessions/2026-08-22 - en feilplassert middleware.ts gjorde hele
   // auth-laget inert uten at en eneste test feilet.
-  const denied = authorize(await requireDetoxUser(), "detox:read")
+  const denied = authorize(await requireDetoxPrincipal(), "detox:read")
   if (denied) return denied
 
   try {
