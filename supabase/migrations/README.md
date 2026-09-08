@@ -15,6 +15,7 @@ Kjøring (inntil CLI-flyt er satt opp): Supabase SQL Editor på prosjektet
 | 0005_revoke_anon_grants_remaining_tables.sql | Fjerner anon sine grants (inkl. TRUNCATE) på agents, batches, notes, pipelines, sops, suppliers — RLS blokkerte lesing/skriving, men ikke TRUNCATE | KJØRT i prod 2026-08-22 |
 | 0006_authenticated_least_privilege.sql | Fjerner DELETE/TRUNCATE fra `authenticated` på alle tabeller; grants utledet fra faktisk kodebruk | KJØRT i prod 2026-08-22 |
 | 0007_content_items.sql | Ny tabell `content_items` — vedvarende state for content-workflowen i detox-vault. RLS på, lesing for `authenticated`, skriving kun for `detox_role` admin/founder/operator, ingen grants til anon, ingen DELETE-grant | KJØRT i prod 2026-08-23 |
+| 0008_shared_state_owner_access.sql | Eier-oversikt (/eiere): SELECT for `authenticated` på `reports`, `findings`, `recommendations`, `run_state`; SELECT/INSERT/UPDATE på `requests` med skriving gated på `detox_role` admin/founder/operator. Kun grants + policyer, ingen kolonner. Rollback nederst i fila | KJØRT i prod 2026-09-08 (Management API, godkjent av Adrian i chat). Verifisert: 7 policyer, `authenticated` SELECT på fire lesetabeller + INSERT/SELECT/UPDATE på `requests`, anon ingen, `activity_events` bit-identisk før/etter |
 
 Etter kjøring: oppdater status-kolonnen her + CURRENT_STATE i detox-os-architecture,
 og verifiser med det nektede anon-kallet beskrevet i 0002.
