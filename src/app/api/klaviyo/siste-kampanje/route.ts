@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server"
 import { authorize, requireDetoxUser } from "@/lib/auth-server"
+import {
+  liveMeta,
+  NotConfiguredError,
+  sourceErrorResponse,
+  type LiveMeta,
+} from "@/lib/source-state"
 
 // Server-side route. Token leses fra env og forlater aldri serveren.
-// Henter siste e-postkampanje fra Klaviyo + open/click rate. Ved feil: mock.
+// Henter siste e-postkampanje fra Klaviyo + open/click rate.
+//
+// Ruta faller IKKE tilbake til mock ved feil. Fram til 2026-08-25 returnerte
+// den kampanjen "Ukens utvalg" med 41 % open rate - et tall ingen kampanje
+// noensinne hadde oppnaadd - med status 200, og /i-dag rendret aldri flagget.
 const KLAVIYO = process.env.KLAVIYO_API_KEY
 
 // 2024-10-15 matcher den verifiserte /api/oversikt-ruten. Reporting-API-et
@@ -11,21 +21,14 @@ const KLAVIYO_REVISION = "2024-10-15"
 
 export const dynamic = "force-dynamic"
 
-type KampanjeData = {
+type KampanjeTall = {
   kampanje_navn: string
   open_rate: number // fraksjon 0..1
   click_rate: number // fraksjon 0..1
   sendt_dato: string | null
-  mock?: true
 }
 
-const MOCK: KampanjeData = {
-  kampanje_navn: "Ukens utvalg",
-  open_rate: 0.41,
-  click_rate: 0.038,
-  sendt_dato: null,
-  mock: true,
-}
+export type KampanjeData = KampanjeTall & LiveMeta
 
 const HEADERS = () => ({
   Authorization: `Klaviyo-API-Key ${KLAVIYO}`,
@@ -122,8 +125,10 @@ async function campaignRates(
   }
 }
 
-async function fetchKlaviyo(): Promise<KampanjeData> {
-  if (!KLAVIYO) throw new Error("Klaviyo-token mangler i miljøvariabler")
+async function fetchKlaviyo(): Promise<KampanjeTall> {
+  if (!KLAVIYO) {
+    throw new NotConfiguredError("KLAVIYO_API_KEY mangler i miljøet")
+  }
   const campaign = await latestEmailCampaign()
   const metricId = await placedOrderMetricId()
   // Uten metrikk-ID kan vi ikke hente rater - vis kampanjenavn, rater 0.
@@ -148,8 +153,11 @@ export async function GET() {
 
   try {
     const data = await fetchKlaviyo()
-    return NextResponse.json(data, { status: 200 })
-  } catch {
-    return NextResponse.json(MOCK, { status: 200 })
+    return NextResponse.json<KampanjeData>(
+      { ...data, ...liveMeta("klaviyo") },
+      { status: 200 },
+    )
+  } catch (e) {
+    return sourceErrorResponse("klaviyo", e)
   }
 }

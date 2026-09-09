@@ -18,8 +18,12 @@ type KundeserviceData = {
   meldinger: GmailMelding[]
   totalt: number
   kategorier: Record<string, number>
-  mock?: true
 }
+
+// Ruta gir 503 (Gmail ikke konfigurert) eller 502 (Gmail nede). Tidligere ga
+// begge en tom innboks med status 200, som er en helt annen beskjed enn
+// "vi klarte ikke aa lese den".
+type KildeFeil = "ikke_konfigurert" | "utilgjengelig"
 
 const KATEGORI_FARGE: Record<string, string> = {
   Levering: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
@@ -50,6 +54,7 @@ function gmailLink(id: string): string {
 
 export default function KundeservicePage() {
   const [data, setData] = React.useState<KundeserviceData | null>(null)
+  const [feil, setFeil] = React.useState<KildeFeil | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [kategoriFilter, setKategoriFilter] = React.useState<string>("alle")
   const [visUleste, setVisUleste] = React.useState(false)
@@ -57,14 +62,23 @@ export default function KundeservicePage() {
   React.useEffect(() => {
     let cancelled = false
     fetch("/api/gmail/kundeservice", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((json: KundeserviceData) => {
+      .then(async (r) => {
+        if (cancelled) return
+        if (!r.ok) {
+          setFeil(r.status === 503 ? "ikke_konfigurert" : "utilgjengelig")
+          setLoading(false)
+          return
+        }
+        setData((await r.json()) as KundeserviceData)
+        setFeil(null)
+        setLoading(false)
+      })
+      .catch(() => {
         if (!cancelled) {
-          setData(json)
+          setFeil("utilgjengelig")
           setLoading(false)
         }
       })
-      .catch(() => setLoading(false))
     return () => { cancelled = true }
   }, [])
 
@@ -89,6 +103,20 @@ export default function KundeservicePage() {
           Live innboks fra kontakt@detox.no
         </p>
       </div>
+
+      {feil !== null && (
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          <p className="font-medium">
+            {feil === "ikke_konfigurert"
+              ? "Gmail er ikke koblet til"
+              : "Gmail er utilgjengelig akkurat nå"}
+          </p>
+          <p className="mt-1 text-xs">
+            Innboksen kunne ikke leses. Tallene under er ikke en måling — de er
+            tomme fordi vi ikke fikk svar.
+          </p>
+        </div>
+      )}
 
       {/* KPIer */}
       <section className="mt-6">
@@ -243,9 +271,6 @@ export default function KundeservicePage() {
         )}
       </section>
 
-      {data?.mock && (
-        <p className="mt-3 text-xs text-gray-400">Viser mock-data - Gmail ikke tilgjengelig</p>
-      )}
     </>
   )
 }

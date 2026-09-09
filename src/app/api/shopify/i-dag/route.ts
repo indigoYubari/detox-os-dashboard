@@ -1,8 +1,21 @@
 import { NextResponse } from "next/server"
 import { authorize, requireDetoxUser } from "@/lib/auth-server"
+import {
+  liveMeta,
+  NotConfiguredError,
+  sourceErrorResponse,
+  type LiveMeta,
+} from "@/lib/source-state"
 
 // Server-side route. Token leses fra env og forlater aldri serveren.
-// Henter dagens ordrer fra Shopify Admin API. Ved feil: myk fallback til mock.
+// Henter dagens ordrer fra Shopify Admin API.
+//
+// Ruten faller IKKE tilbake til mock ved feil. Fram til 2026-08-25 returnerte
+// den { ordrer_i_dag: 7, omsetning_i_dag: 8420, mock: true } med status 200 ved
+// enhver feil - manglende token inkludert - og /i-dag rendret aldri mock-
+// flagget. Resultatet var at forsiden kunne vise oppdiktet omsetning som om
+// den var dagens virkelighet. Se Detox OS-byggeloepet SS4: "Mock eller
+// seed-data skal aldri presenteres som live virkelighet."
 const SHOP = process.env.SHOPIFY_SHOP_DOMAIN
 const SHOP_TOKEN = process.env.SHOPIFY_ADMIN_TOKEN
 
@@ -10,21 +23,14 @@ const SHOPIFY_API_VERSION = "2024-01"
 
 export const dynamic = "force-dynamic"
 
-type ShopifyTodayData = {
+type ShopifyTall = {
   ordrer_i_dag: number
   omsetning_i_dag: number
   snitt_ordreverdi: number
   valuta: string
-  mock?: true
 }
 
-const MOCK: ShopifyTodayData = {
-  ordrer_i_dag: 7,
-  omsetning_i_dag: 8420,
-  snitt_ordreverdi: 1203,
-  valuta: "NOK",
-  mock: true,
-}
+export type ShopifyTodayData = ShopifyTall & LiveMeta
 
 // Midnatt i dag i Europe/Oslo som ISO med korrekt offset (håndterer sommertid).
 function osloMidnightISO(): string {
@@ -50,9 +56,11 @@ function osloMidnightISO(): string {
   return `${ymd}T00:00:00${tz}`
 }
 
-async function fetchShopify(): Promise<ShopifyTodayData> {
+async function fetchShopify(): Promise<ShopifyTall> {
   if (!SHOP || !SHOP_TOKEN) {
-    throw new Error("Shopify-token mangler i miljøvariabler")
+    throw new NotConfiguredError(
+      "SHOPIFY_SHOP_DOMAIN eller SHOPIFY_ADMIN_TOKEN mangler i miljøet",
+    )
   }
   const since = osloMidnightISO()
   const url =
@@ -99,8 +107,11 @@ export async function GET() {
 
   try {
     const data = await fetchShopify()
-    return NextResponse.json(data, { status: 200 })
-  } catch {
-    return NextResponse.json(MOCK, { status: 200 })
+    return NextResponse.json<ShopifyTodayData>(
+      { ...data, ...liveMeta("shopify") },
+      { status: 200 },
+    )
+  } catch (e) {
+    return sourceErrorResponse("shopify", e)
   }
 }

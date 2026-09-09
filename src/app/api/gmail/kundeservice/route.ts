@@ -1,5 +1,16 @@
 import { NextResponse } from "next/server"
 import { authorize, requireDetoxUser } from "@/lib/auth-server"
+import {
+  liveMeta,
+  NotConfiguredError,
+  sourceErrorResponse,
+  type LiveMeta,
+} from "@/lib/source-state"
+
+// Ruta faller IKKE tilbake til mock ved feil. Fram til 2026-08-25 returnerte
+// den { meldinger: [], totalt: 0, mock: true } med status 200 - altsaa en tom
+// innboks - naar Gmail faktisk var utilgjengelig. "Ingen henvendelser" og "vi
+// klarte ikke lese innboksen" er to helt ulike beskjeder til et kundeserviceteam.
 
 export const dynamic = "force-dynamic"
 
@@ -21,19 +32,13 @@ type GmailMessage = {
   kategori: string
 }
 
-type KundeserviceData = {
+type KundeserviceTall = {
   meldinger: GmailMessage[]
   totalt: number
   kategorier: Record<string, number>
-  mock?: true
 }
 
-const MOCK: KundeserviceData = {
-  meldinger: [],
-  totalt: 0,
-  kategorier: {},
-  mock: true,
-}
+export type KundeserviceData = KundeserviceTall & LiveMeta
 
 const KATEGORI_REGLER: { nokkelord: string[]; kategori: string }[] = [
   { nokkelord: ["levering", "pakke", "frakt", "forsinkelse", "tracking", "sporing", "ordre"], kategori: "Levering" },
@@ -58,8 +63,11 @@ function parseFrom(from: string): { name: string; email: string } {
 }
 
 async function accessToken(): Promise<string> {
-  if (!CLIENT_ID || !CLIENT_SECRET || !REFRESH_TOKEN_KONTAKT)
-    throw new Error("Mangler OAuth-konfig")
+  if (!CLIENT_ID || !CLIENT_SECRET || !REFRESH_TOKEN_KONTAKT) {
+    throw new NotConfiguredError(
+      "GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET eller GOOGLE_REFRESH_TOKEN_KONTAKT mangler i miljøet",
+    )
+  }
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -148,9 +156,14 @@ export async function GET() {
       kategorier[m.kategori] = (kategorier[m.kategori] ?? 0) + 1
     }
 
-    return NextResponse.json({ meldinger, totalt: meldinger.length, kategorier })
+    return NextResponse.json<KundeserviceData>({
+      meldinger,
+      totalt: meldinger.length,
+      kategorier,
+      ...liveMeta("gmail"),
+    })
   } catch (err) {
     console.error("[kundeservice] feil:", String(err))
-    return NextResponse.json(MOCK, { status: 200 })
+    return sourceErrorResponse("gmail", err)
   }
 }
