@@ -1,6 +1,7 @@
 import React from "react"
 
 import { kr, num } from "@/components/i-dag/format"
+import { Badge } from "@/components/Badge"
 import { KpiCard } from "@/components/ui/KpiCard"
 import { OsCard } from "@/components/ui/OsCard"
 import { fetchContentItems } from "@/lib/content-server"
@@ -243,8 +244,21 @@ function RecList({
 function BriefingBand({ report }: { report: RadarReport }) {
   const b = briefingOf(report)
   const pendingRecs = report.recommendations.filter((r) => r.status === "pending").length
+  const reportAgeH = (Date.now() - new Date(report.created_at).getTime()) / 3_600_000
+  const freshness =
+    reportAgeH <= 24
+      ? { variant: "success" as const, label: "Fersk" }
+      : reportAgeH <= 48
+        ? { variant: "warning" as const, label: "Eldre enn 24 t" }
+        : { variant: "error" as const, label: "STALE — ingen rapport siste 48 t" }
   return (
     <OsCard title={`Briefing — Content Radar ${report.period}`}>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <Badge variant={freshness.variant}>{freshness.label}</Badge>
+        <span className="text-[10px] text-[var(--os-text-muted)]">
+          Rapport kom {timeLabel(report.created_at)} · {Math.round(reportAgeH)} t siden
+        </span>
+      </div>
       {b.funn.length === 0 ? (
         <Empty title="Ingen funn i denne rapporten.">
           findings for report_id {report.id.slice(0, 8)}… er tom (pulsen unntatt).
