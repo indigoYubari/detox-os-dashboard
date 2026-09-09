@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  butikkVindu,
   IKKE_TILGJENGELIG,
   lesButikkTall,
   STALE_ETTER_TIMER,
@@ -26,9 +27,27 @@ function metrics(overstyr: Partial<MetricsResponse> = {}): MetricsResponse {
         impressions: 0,
         clicks: 0,
         byType: [
-          { entity_type: "product", rows: 201, spend: 0, revenue: 173495.4, conversions: 311 },
-          { entity_type: "order", rows: 128, spend: 0, revenue: 154422.4, conversions: 128 },
-          { entity_type: "customer_segment", rows: 10, spend: 0, revenue: 153926.3, conversions: 127 },
+          {
+            entity_type: "product",
+            rows: 201,
+            spend: 0,
+            revenue: 173495.4,
+            conversions: 311,
+          },
+          {
+            entity_type: "order",
+            rows: 128,
+            spend: 0,
+            revenue: 154422.4,
+            conversions: 128,
+          },
+          {
+            entity_type: "customer_segment",
+            rows: 10,
+            spend: 0,
+            revenue: 153926.3,
+            conversions: 127,
+          },
         ],
       },
     ],
@@ -66,10 +85,13 @@ describe("lesButikkTall", () => {
     expect(t.snittordre).toBeCloseTo(154422.4 / 128, 6)
   })
 
-  it("leser produkter og enheter fra product-nivaa", () => {
+  it("leser enheter fra product-nivaa, og lar product.rows ligge", () => {
     const t = lesButikkTall(metrics())!
-    expect(t.produkter).toBe(201)
     expect(t.enheter).toBe(311)
+    // 201 er antall produkt-DAGER (en rad per produkt per synkdag), ikke
+    // antall produkter. Tallet skal ikke finnes i resultatet under noe navn.
+    expect(JSON.stringify(t)).not.toContain("201")
+    expect(t).not.toHaveProperty("produkter")
   })
 
   it("utleder snittordre-delta fra forrige periode", () => {
@@ -94,7 +116,7 @@ describe("lesButikkTall", () => {
       (t) => t.entity_type !== "product",
     )
     const t = lesButikkTall(m)!
-    expect(t.produkter).toBe(0)
+    expect(t.enheter).toBe(0)
     expect(t.omsetning).toBe(154422.4)
   })
 
@@ -150,6 +172,31 @@ describe("vurderFriskhet", () => {
   })
 })
 
+describe("butikkVindu", () => {
+  it("slutter i gaar og dekker noeyaktig N datoer", () => {
+    const v = butikkVindu(new Date("2026-09-09T18:30:00Z"), 30)
+    expect(v.until).toBe("2026-09-08")
+    expect(v.since).toBe("2026-08-10")
+    // 10. aug .. 8. sep inklusive = 30 datoer. Den gamle utregningen ga
+    // 2026-08-10..2026-09-09 = 31, der den siste dagen aldri var synket.
+    const dager = (Date.parse(v.until) - Date.parse(v.since)) / 86_400_000 + 1
+    expect(dager).toBe(30)
+  })
+
+  it("tar ikke med dagens dato", () => {
+    const v = butikkVindu(new Date("2026-09-09T00:10:00Z"), 7)
+    expect(v.until).toBe("2026-09-08")
+    expect(v.since).toBe("2026-09-02")
+  })
+
+  it("krysser maanedsskifte og aarsskifte", () => {
+    expect(butikkVindu(new Date("2027-01-01T12:00:00Z"), 3)).toEqual({
+      since: "2026-12-29",
+      until: "2026-12-31",
+    })
+  })
+})
+
 describe("gjeldslisten", () => {
   it("navngir hvert punkt med en begrunnelse", () => {
     expect(IKKE_TILGJENGELIG.length).toBeGreaterThan(0)
@@ -157,6 +204,12 @@ describe("gjeldslisten", () => {
       expect(rad.navn.length).toBeGreaterThan(0)
       expect(rad.hvorfor.length).toBeGreaterThan(20)
     }
+  })
+
+  it("forklarer at produkt-antall og netto-omsetning mangler", () => {
+    const navn = IKKE_TILGJENGELIG.map((r) => r.navn)
+    expect(navn).toContain("Antall ulike produkter solgt")
+    expect(navn).toContain("Omsetning uten kansellerte og refunderte ordrer")
   })
 })
 
@@ -181,5 +234,13 @@ describe("kildekode-vakt", () => {
     }
     // Siden skal hente data, ikke baere dem.
     expect(kode).toContain("getMetrics")
+    // Vinduet skal komme fra butikkVindu (til og med i gaar), ikke regnes
+    // lokalt med subDays - det ga 31 dager med en tom siste dag.
+    expect(kode).toContain("butikkVindu")
+    expect(kode).not.toContain("subDays")
+    // Tooltipen paastod at kansellerte ordrer var utelatt; synken henter
+    // status: any. Paastanden skal ikke komme tilbake.
+    expect(kode).not.toMatch(/Kansellerte ordrer er ikke med/)
+    expect(kode).not.toContain("tall.produkter")
   })
 })

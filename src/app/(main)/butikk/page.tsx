@@ -1,12 +1,13 @@
 "use client"
 
 import React from "react"
-import { format, subDays } from "date-fns"
+import { format } from "date-fns"
 
 import { StatTooltip } from "@/components/ui/StatTooltip"
 import { deltaClass, kr, num, pctLabel } from "@/lib/ad-format"
 import { getMetrics, type DeltaValue } from "@/lib/detox-api"
 import {
+  butikkVindu,
   IKKE_TILGJENGELIG,
   lesButikkTall,
   vurderFriskhet,
@@ -95,15 +96,14 @@ function Kildelinje({ friskhet }: { friskhet: Datafriskhet }) {
       ) : (
         <span>
           {" "}
-          · sist synket{" "}
-          {format(new Date(friskhet.sist_synket), "d. MMM HH:mm")}
+          · sist synket {format(new Date(friskhet.sist_synket), "d. MMM HH:mm")}
           {friskhet.timer_siden !== null && ` (${friskhet.timer_siden}t siden)`}
         </span>
       )}
       {stale && (
         <p className="mt-1 text-xs">
-          Synken har ikke kjørt som normalt. Tallene under er ekte, men kan
-          være utdaterte.
+          Synken har ikke kjørt som normalt. Tallene under er ekte, men kan være
+          utdaterte.
         </p>
       )}
     </div>
@@ -115,9 +115,8 @@ export default function ButikkPage() {
 
   React.useEffect(() => {
     let cancelled = false
-    const naa = new Date()
-    const since = format(subDays(naa, WINDOW_DAYS), "yyyy-MM-dd")
-    const until = format(naa, "yyyy-MM-dd")
+    // Til og med i gaar: dagens tall finnes ikke foer synken 04:00 i morgen.
+    const { since, until } = butikkVindu(new Date(), WINDOW_DAYS)
 
     getMetrics(since, until)
       .then((m) => {
@@ -152,7 +151,7 @@ export default function ButikkPage() {
           Butikk
         </h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Shopify · siste {WINDOW_DAYS} dager
+          Shopify · siste {WINDOW_DAYS} hele dager, til og med i går
         </p>
       </div>
 
@@ -192,13 +191,13 @@ export default function ButikkPage() {
                 <>
                   <Kpi
                     navn="Omsetning"
-                    forklaring={`Sum omsetning fra Shopify-ordrer siste ${WINDOW_DAYS} dager. Kansellerte ordrer er ikke med.`}
+                    forklaring={`Sum ordreverdi fra Shopify siste ${WINDOW_DAYS} hele dager. Brutto: kansellerte og refunderte ordrer er med, siden synken henter alle statuser.`}
                     verdi={kr(tilstand.tall.omsetning)}
                     delta={tilstand.tall.delta.omsetning}
                   />
                   <Kpi
                     navn="Ordrer"
-                    forklaring={`Antall Shopify-ordrer siste ${WINDOW_DAYS} dager.`}
+                    forklaring={`Antall Shopify-ordrer siste ${WINDOW_DAYS} hele dager, alle statuser.`}
                     verdi={num(tilstand.tall.ordrer)}
                     delta={tilstand.tall.delta.ordrer}
                   />
@@ -210,11 +209,9 @@ export default function ButikkPage() {
                     fremhevet
                   />
                   <Kpi
-                    navn="Produkter solgt"
-                    forklaring="Antall ulike produkter med minst ett salg i perioden, og totalt antall solgte enheter."
-                    verdi={`${num(tilstand.tall.produkter)} / ${num(
-                      tilstand.tall.enheter,
-                    )} enh.`}
+                    navn="Solgte enheter"
+                    forklaring="Totalt antall solgte enheter i perioden, summert fra ordrelinjene. Antall ulike produkter kan ikke leses ut ennå, se listen nederst."
+                    verdi={num(tilstand.tall.enheter)}
                   />
                 </>
               )}

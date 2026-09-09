@@ -1,4 +1,8 @@
-import type { MetricsResponse, ChannelMetrics, DeltaValue } from "@/lib/detox-api"
+import type {
+  MetricsResponse,
+  ChannelMetrics,
+  DeltaValue,
+} from "@/lib/detox-api"
 
 // Rene funksjoner for /butikk. Skilt ut fra siden slik at reglene under kan
 // testes uten aa rendre React - saerlig at en manglende kilde aldri stille
@@ -37,12 +41,27 @@ export function vurderFriskhet(
   }
 }
 
+/**
+ * Datovinduet siden ber om. Ad-agenten synker Shopify per DAG (en jobb rundt
+ * 04:00 UTC som henter gaarsdagen), saa dagens dato har aldri tall foer i
+ * morgen. Vinduet slutter derfor i gaar og strekker seg `dager` hele dager
+ * bakover - `dager` datoer inklusive begge ender. Den foerste versjonen brukte
+ * subDays(naa, 30)..naa, som er 31 datoer der den siste alltid var tom.
+ */
+export function butikkVindu(
+  naa: Date,
+  dager: number,
+): { since: string; until: string } {
+  const ymd = (d: Date) => d.toISOString().slice(0, 10)
+  const igaar = new Date(naa.getTime() - 86_400_000)
+  const start = new Date(igaar.getTime() - (dager - 1) * 86_400_000)
+  return { since: ymd(start), until: ymd(igaar) }
+}
+
 export type ButikkTall = {
   omsetning: number
   ordrer: number
   snittordre: number
-  /** Antall distinkte produkter med salg i perioden. */
-  produkter: number
   /** Antall solgte enheter i perioden. */
   enheter: number
   delta: {
@@ -67,9 +86,18 @@ function delta(naa: number, forrige: number): DeltaValue {
  * ikke finnes i perioden - kalleren skal si "ingen data", ikke vise nuller.
  *
  * Merk hvilke nivaaer som brukes: omsetning og ordrer leses fra `order`-rader
- * (samme headline-nivaa som ad-agenten selv bruker), mens produkttallene leses
- * fra `product`-rader. De to summerer bevisst ikke likt - en ordre med tre
- * ulike varer gir en order-rad og tre product-rader.
+ * (samme headline-nivaa som ad-agenten selv bruker), mens enheter leses fra
+ * `product`-rader. De to summerer bevisst ikke likt - en ordre med tre ulike
+ * varer gir en order-rad og tre product-rader.
+ *
+ * `product.rows` brukes IKKE: ad-agenten skriver en product-rad per produkt
+ * per synkdag (shopify.service.js: bestsellers(orders) for ett doegn), saa
+ * over 30 dager er rows antall produkt-dager, ikke antall ulike produkter.
+ * Live 2026-09-09 ga 214 rows for 31 dager - Detox har ikke 214 produkter.
+ *
+ * Alle ordrer telles uansett status: synken henter `status: 'any'` og
+ * filtrerer ikke paa financial_status. Kansellerte og refunderte ordrer er
+ * altsaa MED i baade omsetning og antall.
  */
 export function lesButikkTall(m: MetricsResponse): ButikkTall | null {
   const shopify = shopifyKanal(m)
@@ -97,7 +125,6 @@ export function lesButikkTall(m: MetricsResponse): ButikkTall | null {
     omsetning,
     ordrer,
     snittordre,
-    produkter: produktRad?.rows ?? 0,
     enheter: produktRad?.conversions ?? 0,
     delta: {
       omsetning: cmp?.revenue ?? null,
@@ -117,6 +144,16 @@ export const IKKE_TILGJENGELIG: { navn: string; hvorfor: string }[] = [
     navn: "Topprodukter med navn",
     hvorfor:
       "channel_metrics har radene, men /api/metrics aggregerer bort entity_name. Krever et per-produkt-endepunkt i ad-agenten.",
+  },
+  {
+    navn: "Antall ulike produkter solgt",
+    hvorfor:
+      "/api/metrics gir én product-rad per produkt per synkdag, så rows over en periode er produkt-dager, ikke produkter. Krever distinct-telling i ad-agenten.",
+  },
+  {
+    navn: "Omsetning uten kansellerte og refunderte ordrer",
+    hvorfor:
+      "Synken henter alle ordrestatuser (status: any) og lagrer financial_status bare i raw-feltet. Tallene her er brutto til ad-agenten filtrerer.",
   },
   {
     navn: "Lagerstatus og low-stock",
