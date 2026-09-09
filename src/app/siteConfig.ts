@@ -5,6 +5,7 @@ export const siteConfig = {
   baseLinks: {
     home: "/",
     // Daglig
+    eiere: "/eiere",
     idag: "/i-dag",
     status: "/status",
     overview: "/overview",

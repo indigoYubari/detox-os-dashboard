@@ -2,7 +2,7 @@
 // Bruker Supabase Auth via cookies. service_role brukes ALDRI her.
 
 import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
+import { cookies, headers } from "next/headers"
 import { NextResponse } from "next/server"
 
 import {
@@ -11,6 +11,10 @@ import {
   scopesForRole,
   type DetoxScope,
 } from "./auth-policy"
+import {
+  authenticateGptRequest,
+  createMachineSupabaseClient,
+} from "./gpt-auth"
 
 export type DetoxUser = {
   id: string
@@ -19,6 +23,23 @@ export type DetoxUser = {
   scopes: DetoxScope[]
   // Normalisert actor-ID til audit/decided_by: e-post, ellers bruker-ID.
   actorLabel: string
+}
+
+/**
+ * En autentisert kaller - menneske eller maskin.
+ *
+ * `principal` er identiteten som handlet. For et menneske er det e-post/uuid;
+ * for en Custom GPT er det maskinnavnet ("kim-gpt"). `configuredFor` sier
+ * hvilket menneske GPT-en er KONFIGURERT for, og er kontekst - aldri bevis
+ * for at personen selv utførte handlingen. Se detox-os-architecture
+ * docs/iam.md og mandatets §7.
+ */
+export type DetoxPrincipal = DetoxUser & {
+  principal: string
+  actorType: "human" | "service"
+  configuredFor: string | null
+  /** Maskinidentitetens JWT. Kun satt for actorType "service". */
+  accessToken?: string
 }
 
 export function createSupabaseServerClient() {
@@ -68,6 +89,41 @@ export async function requireDetoxUser(): Promise<DetoxUser | null> {
   }
 }
 
+/**
+ * Autentiserer en request som menneske ELLER maskin (Custom GPT).
+ *
+ * Rekkefølgen er bevisst: en gyldig GPT-credential vinner, slik at en GPT
+ * aldri kan arve en menneskelig cookie-sesjon som tilfeldigvis følger med.
+ * Header-tilstedeværelse alene autentiserer aldri - `authenticateGptRequest`
+ * returnerer null hvis credentialen ikke hasher til en registrert klient, og
+ * da faller vi tilbake til den vanlige menneskelige sesjonssjekken.
+ */
+export async function requireDetoxPrincipal(): Promise<DetoxPrincipal | null> {
+  const gpt = await authenticateGptRequest(headers())
+  if (gpt) {
+    return {
+      id: gpt.userId,
+      email: gpt.email,
+      role: gpt.role,
+      scopes: gpt.scopes,
+      actorLabel: gpt.principal,
+      principal: gpt.principal,
+      actorType: "service",
+      configuredFor: gpt.configuredFor,
+      accessToken: gpt.accessToken,
+    }
+  }
+
+  const user = await requireDetoxUser()
+  if (!user) return null
+  return {
+    ...user,
+    principal: user.actorLabel,
+    actorType: "human",
+    configuredFor: null,
+  }
+}
+
 export function unauthenticatedResponse() {
   return NextResponse.json(
     { error: "Ikke innlogget", code: "unauthenticated" },
@@ -77,7 +133,11 @@ export function unauthenticatedResponse() {
 
 export function forbiddenResponse(scope: DetoxScope) {
   return NextResponse.json(
-    { error: `Mangler tilgang (${scope})`, code: "forbidden", required_scope: scope },
+    {
+      error: `Mangler tilgang (${scope})`,
+      code: "forbidden",
+      required_scope: scope,
+    },
     { status: 403 },
   )
 }
@@ -93,9 +153,13 @@ export function authorize(
 }
 
 /**
- * Append-only audit til activity_events, med brukerens egen session (RLS
+ * Append-only audit til activity_events, med kallerens egen session (RLS
  * krever actor_id = auth.uid()). Best effort: audit-feil velter aldri svaret,
  * men logges strukturert.
+ *
+ * For en maskinprinsipal sendes `accessToken`, slik at raden skrives med
+ * GPT-brukerens egen `auth.uid()` - ikke med service_role, og aldri med et
+ * menneskes identitet.
  */
 export async function recordActivityEvent(event: {
   actorId: string
@@ -106,9 +170,12 @@ export async function recordActivityEvent(event: {
   source?: string
   correlationId?: string
   detail?: Record<string, unknown>
+  accessToken?: string
 }): Promise<void> {
   try {
-    const supabase = createSupabaseServerClient()
+    const supabase = event.accessToken
+      ? createMachineSupabaseClient(event.accessToken)
+      : createSupabaseServerClient()
     const { error } = await supabase.from("activity_events").insert({
       actor_id: event.actorId,
       actor_type: event.actorType ?? "human",

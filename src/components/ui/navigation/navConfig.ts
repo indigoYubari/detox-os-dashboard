@@ -18,6 +18,7 @@ import {
   Sparkles,
   Star,
   Truck,
+  Users,
   Zap,
 } from "lucide-react"
 
@@ -41,6 +42,7 @@ export const navSections: NavSection[] = [
   {
     title: "Daglig",
     items: [
+      { name: "Eiere", href: siteConfig.baseLinks.eiere, icon: Users },
       { name: "I dag", href: siteConfig.baseLinks.idag, icon: LayoutDashboard },
       { name: "Status", href: siteConfig.baseLinks.status, icon: Activity },
       {

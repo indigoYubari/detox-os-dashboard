@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { authorize, requireDetoxUser } from "@/lib/auth-server"
+import { authorize, requireDetoxPrincipal } from "@/lib/auth-server"
 
 // Server-side proxy mot Anthropic. Nøkkelen ligger KUN på serveren
 // (ANTHROPIC_API_KEY, ikke NEXT_PUBLIC) og eksponeres aldri til nettleseren.
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   // skal ikke vaere avhengig av at den er riktig konfigurert. Se
   // sessions/2026-08-22 - en feilplassert middleware.ts gjorde hele
   // auth-laget inert uten at en eneste test feilet.
-  const denied = authorize(await requireDetoxUser(), "work:write")
+  const denied = authorize(await requireDetoxPrincipal(), "work:write")
   if (denied) return denied
 
   const apiKey = process.env.ANTHROPIC_API_KEY
