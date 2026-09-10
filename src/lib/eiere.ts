@@ -106,7 +106,10 @@ const PULS_RE_V2 =
 
 // Prosent kan staa etter ordet ("omsetning +0,8 %") eller foer ("−12,1 % omsetning").
 const PCT = "([+\\-−]?\\d+(?:,\\d+)?)\\s*%"
-const REVENUE_DELTA_RE = new RegExp(`omsetning\\s*${PCT}|${PCT}\\s*omsetning`, "i")
+const REVENUE_DELTA_RE = new RegExp(
+  `omsetning\\s*${PCT}|${PCT}\\s*omsetning`,
+  "i",
+)
 const ORDERS_DELTA_RE = new RegExp(`ordrer\\s*${PCT}|${PCT}\\s*ordrer`, "i")
 
 function deltaOf(re: RegExp, claim: string): number | null {
@@ -143,15 +146,21 @@ export function parsePulsClaim(claim: string): Puls | null {
 /** Pulsen ligger som kind=signal (klassisk) eller kind=data (kortform fra 10.09). */
 export const PULS_KINDS = ["signal", "data"] as const
 
-export function isPulsFinding(f: Pick<RadarFinding, "kind" | "claim">): boolean {
-  return (PULS_KINDS as readonly string[]).includes(f.kind) && /salgspuls/i.test(f.claim)
+export function isPulsFinding(
+  f: Pick<RadarFinding, "kind" | "claim">,
+): boolean {
+  return (
+    (PULS_KINDS as readonly string[]).includes(f.kind) &&
+    /salgspuls/i.test(f.claim)
+  )
 }
 
 export function findPuls(findings: readonly RadarFinding[]): PulsResult {
   const f = findings.find(isPulsFinding)
   if (!f) return { ok: false, reason: "no_signal" }
   const puls = parsePulsClaim(f.claim)
-  if (!puls) return { ok: false, reason: "unparsable", findingId: f.id, raw: f.claim }
+  if (!puls)
+    return { ok: false, reason: "unparsable", findingId: f.id, raw: f.claim }
   return { ok: true, puls, findingId: f.id, raw: f.claim }
 }
 
@@ -163,6 +172,118 @@ export function pctLabel(pct: number | null): string {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   })} %`
+}
+
+/** Prosent endring fra prev til cur, i prosentenheter. null naar prev er 0. */
+export function deltaPct(cur: number, prev: number): number | null {
+  if (!Number.isFinite(cur) || !Number.isFinite(prev) || prev === 0) return null
+  return ((cur - prev) / prev) * 100
+}
+
+// ── Profitt: snittordreverdi (AOV) beregnet av pulsen ────────────────────────
+// Anakin oppgir AOV bare noen dager, og aldri for forrige uke. Vi regner den
+// ut av tallene som finnes (omsetning / ordrer) og merker den som beregnet.
+
+export type Aov = {
+  aov: number | null
+  aovPrev: number | null
+  aovDeltaPct: number | null
+}
+
+export function aovOf(p: Puls): Aov {
+  const aov = p.orders7d > 0 ? p.revenue7d / p.orders7d : null
+  const aovPrev = p.ordersPrev > 0 ? p.revenuePrev / p.ordersPrev : null
+  return {
+    aov,
+    aovPrev,
+    aovDeltaPct:
+      aov !== null && aovPrev !== null ? deltaPct(aov, aovPrev) : null,
+  }
+}
+
+// ── PULS-historikk: én puls per radar-dag ────────────────────────────────────
+// Hver nattlige radar baerer sin egen "siste 7 dager"-puls. Lagt etter
+// hverandre gir de en rullerende ukestrend. Rapporter uten parsebar puls
+// hoppes over, og en gjentatt identisk maaling (Anakin gjentok 08.09-pulsen
+// ordrett 09.09) telles én gang — en kopi er ikke en ny lesing.
+
+export type PulsPoint = { period: string; puls: Puls }
+
+export function samePuls(a: Puls, b: Puls): boolean {
+  return (
+    a.orders7d === b.orders7d &&
+    a.revenue7d === b.revenue7d &&
+    a.ordersPrev === b.ordersPrev &&
+    a.revenuePrev === b.revenuePrev
+  )
+}
+
+export function pulsHistoryOf(
+  reports: readonly { period: string; findings: readonly RadarFinding[] }[],
+): PulsPoint[] {
+  // Foerste rapport per periode vinner (input er nyeste foerst).
+  const byPeriod = new Map<string, Puls>()
+  for (const r of reports) {
+    if (byPeriod.has(r.period)) continue
+    const res = findPuls(r.findings)
+    if (res.ok) byPeriod.set(r.period, res.puls)
+  }
+  const sorted = Array.from(byPeriod.entries()).sort(([a], [b]) => a.localeCompare(b))
+  const out: PulsPoint[] = []
+  for (const [period, puls] of sorted) {
+    const prev = out[out.length - 1]
+    if (prev && samePuls(prev.puls, puls)) continue
+    out.push({ period, puls })
+  }
+  return out
+}
+
+/** "2026-09-10" -> "10.09" for akser. Ukjent format vises som det er. */
+export function shortDate(period: string): string {
+  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(period)
+  return m ? `${m[2]}.${m[1]}` : period
+}
+
+// ── Grafgeometri (ren matematikk, SVG tegnes i PulsChart.tsx) ────────────────
+
+/** Soeylehoeyder proporsjonalt med stoerste verdi; alle 0 naar ingenting er > 0. */
+export function scaleBars(values: readonly number[], height: number): number[] {
+  const max = Math.max(0, ...values)
+  return values.map((v) => (max > 0 && v > 0 ? (v / max) * height : 0))
+}
+
+export type LinePath = {
+  d: string
+  coords: [number, number][]
+  min: number
+  max: number
+}
+
+/**
+ * Polylinje for en serie i et w×h-omraade. Flat serie legges midt i hoeyden.
+ * null ved faerre enn to punkter — da finnes det ingen linje aa tegne.
+ */
+export function linePath(
+  values: readonly number[],
+  width: number,
+  height: number,
+  pad = 4,
+): LinePath | null {
+  if (values.length < 2) return null
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const span = max - min
+  const innerW = width - pad * 2
+  const innerH = height - pad * 2
+  const coords: [number, number][] = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1)) * innerW
+    const y = span > 0 ? pad + (1 - (v - min) / span) * innerH : height / 2
+    return [Math.round(x * 10) / 10, Math.round(y * 10) / 10]
+  })
+  const d = coords
+    .map(([x, y], i) => `${i === 0 ? "M" : "L"}${x} ${y}`)
+    .join(" ")
+  return { d, coords, min, max }
 }
 
 // ── Briefing: funn + spor A/B + neste steg ───────────────────────────────────
@@ -197,7 +318,8 @@ export type Briefing = {
 }
 
 function confidenceOf(f: RadarFinding): number {
-  const n = typeof f.confidence === "string" ? Number(f.confidence) : f.confidence
+  const n =
+    typeof f.confidence === "string" ? Number(f.confidence) : f.confidence
   return typeof n === "number" && Number.isFinite(n) ? n : -1
 }
 
@@ -222,57 +344,200 @@ export function briefingOf(report: RadarReport): Briefing {
   return { funn, sporA, sporB, nesteSteg }
 }
 
+// ── Plan: neste trekk + resten av anbefalingene ──────────────────────────────
+// recommendations har ingen prioritetskolonne. Prioritet utledes av tallet i
+// spor-prefikset (A1/B1 foer A2/B2); anbefalinger uten prefiks er Anakins
+// konkrete, ofte tidskritiske punkter og rangeres foerst, i den rekkefoelgen
+// de ble skrevet. Kun pending vises som plan — avgjorte telles.
+
+const TRACK_NUM_RE = /^[AB](\d+)/
+
+/** 0 for anbefalinger uten spor-prefiks, ellers tallet i prefikset. */
+export function trackRank(action: string): number {
+  const m = TRACK_NUM_RE.exec(stripApprovalMark(action))
+  return m ? Number(m[1]) : 0
+}
+
+export const NEXT_MOVES = 3
+
+export type Plan = {
+  neste: RadarRecommendation[]
+  sporA: RadarRecommendation[]
+  sporB: RadarRecommendation[]
+  utenSpor: RadarRecommendation[]
+  /** approved/rejected/deferred — vises som tall, ikke som liste. */
+  avgjort: number
+}
+
+export function planOf(report: RadarReport, n: number = NEXT_MOVES): Plan {
+  const pending = report.recommendations
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => r.status === "pending")
+    .sort((a, b) => trackRank(a.r.action) - trackRank(b.r.action) || a.i - b.i)
+    .map(({ r }) => r)
+  const neste = pending.slice(0, n)
+  const rest = pending.slice(n)
+  const sporA: RadarRecommendation[] = []
+  const sporB: RadarRecommendation[] = []
+  const utenSpor: RadarRecommendation[] = []
+  for (const r of rest) {
+    const t = trackOf(r.action)
+    if (t === "A") sporA.push(r)
+    else if (t === "B") sporB.push(r)
+    else utenSpor.push(r)
+  }
+  return {
+    neste,
+    sporA,
+    sporB,
+    utenSpor,
+    avgjort: report.recommendations.length - pending.length,
+  }
+}
+
 // ── Forespoersler (requests) ─────────────────────────────────────────────────
 // requests har kolonnene requester, kind (research|content|followup), body,
-// status (open|in_progress|done|cancelled). Typen generate_week / draft_email
-// finnes ikke som kolonne og kodes derfor i body-ens foerste linje. Ingen
-// skjema-endring for dette i v1.
+// status (open|in_progress|done|cancelled). Typen (generate_week …) finnes
+// ikke som kolonne og kodes derfor i body-ens foerste linje. Ingen
+// skjema-endring for dette.
+//
+// Typer med `ref` peker paa én konkret rad (anbefaling, funn eller
+// innholdselement). Teksten leses av serveren fra basen — klienten sender
+// bare id-en. Typer uten ref er generelle knapper.
 
 export const REQUEST_TYPES = {
   generate_week: {
     label: "Neste ukes innhold",
     kind: "content",
+    ref: null,
     prompt:
-      "Lag forslag til neste ukes innhold (spor A Anniken / spor B Detox) basert paa siste Content Radar. Kun utkast — publiser ingenting.",
+      "Lag forslag til neste ukes innhold (spor A Anniken / spor B Detox) basert på siste Content Radar. Kun utkast — publiser ingenting.",
   },
   draft_email: {
     label: "E-postutkast",
     kind: "content",
+    ref: null,
     prompt:
-      "Lag utkast til neste Klaviyo-e-post basert paa siste Content Radar. Kun utkast — ikke send, ikke opprett kampanje.",
+      "Lag utkast til neste Klaviyo-e-post basert på siste Content Radar. Kun utkast — ikke send, ikke opprett kampanje.",
+  },
+  find_idea: {
+    label: "Finn neste idé",
+    kind: "research",
+    ref: null,
+    prompt:
+      "Finn den neste innholdsidéen (spor A Anniken eller spor B Detox) ut fra siste Content Radar og salgspuls. Kun forslag med begrunnelse — publiser ingenting.",
+  },
+  refresh_puls: {
+    label: "Oppdater salgspuls",
+    kind: "followup",
+    ref: null,
+    prompt:
+      "Les Shopify på nytt og skriv en fersk salgspuls (siste 7 dager mot uken før: ordrer, omsetning, snittordreverdi) som nytt funn. Kun lesing — endre ingenting i Shopify.",
+  },
+  do_recommendation: {
+    label: "Gjør anbefaling",
+    kind: "content",
+    ref: "recommendations",
+    prompt:
+      "Gjør denne anbefalingen fra Content Radar: forbered og lag utkast. Publiser og send ingenting uten godkjenning.",
+  },
+  explain_finding: {
+    label: "Forklar funn",
+    kind: "research",
+    ref: "findings",
+    prompt:
+      "Forklar dette funnet fra Content Radar for eierne: hva betyr det for Detox, og hva bør vi gjøre? Kun forklaring — ingen handling.",
+  },
+  draft_content: {
+    label: "Utkast til innhold",
+    kind: "content",
+    ref: "content_items",
+    prompt:
+      "Lag utkast til dette innholdselementet i Annikens stemme. Kun utkast — publiser ingenting.",
   },
 } as const
 
 export type RequestType = keyof typeof REQUEST_TYPES
 
+export type RefTable = "recommendations" | "findings" | "content_items"
+
+export type RefRequestType = {
+  [K in RequestType]: (typeof REQUEST_TYPES)[K]["ref"] extends RefTable
+    ? K
+    : never
+}[RequestType]
+
+export type GenericRequestType = Exclude<RequestType, RefRequestType>
+
 export function isRequestType(v: unknown): v is RequestType {
-  return typeof v === "string" && Object.prototype.hasOwnProperty.call(REQUEST_TYPES, v)
+  return (
+    typeof v === "string" &&
+    Object.prototype.hasOwnProperty.call(REQUEST_TYPES, v)
+  )
 }
 
-const BODY_HEAD_RE = /^\[([a-z_]+)\]\s+til:\s*(\S+)(?:\s+·\s+radar\s+(\S+))?/i
+export function isRefRequestType(v: unknown): v is RefRequestType {
+  return isRequestType(v) && REQUEST_TYPES[v].ref !== null
+}
+
+/** Knappene som ikke trenger en rad aa peke paa. */
+export const GENERIC_REQUEST_TYPES = (
+  Object.keys(REQUEST_TYPES) as RequestType[]
+).filter((t): t is GenericRequestType => REQUEST_TYPES[t].ref === null)
+
+/** Hvor mange tegn av anbefalingen/funnet som tas med i forespoerselen. */
+export const REF_TEXT_MAX = 600
+
+export function clipText(text: string, max: number = REF_TEXT_MAX): string {
+  const t = text.replace(/\s+/g, " ").trim()
+  return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`
+}
+
+const BODY_HEAD_RE =
+  /^\[([a-z_]+)\]\s+til:\s*(\S+)(?:\s+·\s+radar\s+(\S+))?(?:\s+·\s+ref\s+(\S+))?/i
 
 /** Foerste linje er den deterministiske noekkelen; resten er tekst til Anakin. */
-export function requestBodyHead(type: RequestType, period: string | null): string {
-  return `[${type}] til: ${ANAKIN_AGENT_ID}${period ? ` · radar ${period}` : ""}`
+export function requestBodyHead(
+  type: RequestType,
+  period: string | null,
+  ref: string | null = null,
+): string {
+  return `[${type}] til: ${ANAKIN_AGENT_ID}${period ? ` · radar ${period}` : ""}${ref ? ` · ref ${ref}` : ""}`
+}
+
+/** "recommendations/3f2a…" — tabell + id, slik det staar i hodet. */
+export function refKey(table: RefTable, id: string): string {
+  return `${table}/${id}`
 }
 
 export function buildRequestBody(input: {
   type: RequestType
   period: string | null
   requestedBy: string
+  /** Paakrevd for typer med ref: raden det gjelder og teksten fra basen. */
+  ref?: { key: string; text: string }
 }): string {
   const def = REQUEST_TYPES[input.type]
-  return [
-    requestBodyHead(input.type, input.period),
-    def.prompt,
-    `Bestilt fra detox-os-dashboard /eiere av ${input.requestedBy}.`,
-  ].join("\n")
+  const lines = [
+    requestBodyHead(input.type, input.period, input.ref?.key ?? null),
+  ]
+  if (input.ref) {
+    lines.push(
+      `${def.prompt}${input.period ? ` (Content Radar ${input.period})` : ""}`,
+      `«${clipText(input.ref.text)}»`,
+    )
+  } else {
+    lines.push(def.prompt)
+  }
+  lines.push(`Bestilt fra detox-os-dashboard /eiere av ${input.requestedBy}.`)
+  return lines.join("\n")
 }
 
 export type ParsedRequestBody = {
   type: RequestType | null
   to: string | null
   period: string | null
+  ref: string | null
   summary: string
 }
 
@@ -280,13 +545,20 @@ export function parseRequestBody(body: string): ParsedRequestBody {
   const lines = body.split("\n")
   const m = BODY_HEAD_RE.exec(lines[0] ?? "")
   if (!m) {
-    return { type: null, to: null, period: null, summary: body.trim() }
+    return {
+      type: null,
+      to: null,
+      period: null,
+      ref: null,
+      summary: body.trim(),
+    }
   }
   const type = isRequestType(m[1]) ? m[1] : null
   return {
     type,
     to: m[2] ?? null,
     period: m[3] ?? null,
+    ref: m[4] ?? null,
     summary: lines.slice(1).join(" ").trim() || lines[0],
   }
 }
@@ -308,9 +580,12 @@ export function findDuplicateRequest(
   rows: readonly RequestRow[],
   type: RequestType,
   period: string | null,
+  ref: string | null = null,
 ): RequestRow | null {
-  const head = requestBodyHead(type, period)
-  return rows.find((r) => isInQueue(r) && r.body.split("\n")[0] === head) ?? null
+  const head = requestBodyHead(type, period, ref)
+  return (
+    rows.find((r) => isInQueue(r) && r.body.split("\n")[0] === head) ?? null
+  )
 }
 
 // ── Beslutninger paa koeen: kun status-kolonnen roeres ──────────────────────
@@ -324,7 +599,9 @@ export const DECISIONS = {
 export type Decision = keyof typeof DECISIONS
 
 export function isDecision(v: unknown): v is Decision {
-  return typeof v === "string" && Object.prototype.hasOwnProperty.call(DECISIONS, v)
+  return (
+    typeof v === "string" && Object.prototype.hasOwnProperty.call(DECISIONS, v)
+  )
 }
 
 export const REQUEST_STATUS_LABELS: Record<string, string> = {
@@ -336,7 +613,9 @@ export const REQUEST_STATUS_LABELS: Record<string, string> = {
 
 // ── Telegram: lenke eller ferdig tekst — dashboardet sender aldri selv ──────
 
-export function telegramHref(botUsername: string | undefined | null): string | null {
+export function telegramHref(
+  botUsername: string | undefined | null,
+): string | null {
   const u = (botUsername ?? "").trim().replace(/^@/, "")
   return /^[A-Za-z0-9_]{3,64}$/.test(u) ? `https://t.me/${u}` : null
 }

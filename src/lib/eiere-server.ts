@@ -10,8 +10,12 @@
 import { createSupabaseServerClient } from "./auth-server"
 import {
   ANAKIN_AGENT_ID,
+  PULS_KINDS,
+  pulsHistoryOf,
   QUEUE_STATUSES,
   RADAR_REPORT_TYPE,
+  type PulsPoint,
+  type RadarFinding,
   type RadarReport,
   type RequestRow,
   type RunStateRow,
@@ -64,6 +68,42 @@ export async function fetchLatestRadar(): Promise<RadarResult> {
   }
 }
 
+export type PulsHistoryResult = { ok: true; points: PulsPoint[] } | ReadError
+
+/** Antall nattlige radarer som leses for trenden — to uker. */
+export const PULS_HISTORY_REPORTS = 14
+
+/**
+ * Én puls per radar-dag, eldste foerst — grunnlaget for grafen. Leser bare
+ * funn av puls-kindene; parsing og dedupe skjer i pulsHistoryOf.
+ */
+export async function fetchPulsHistory(
+  limit: number = PULS_HISTORY_REPORTS,
+): Promise<PulsHistoryResult> {
+  const supabase = createSupabaseServerClient()
+  const { data, error } = await supabase
+    .from("reports")
+    .select(
+      "id, period, created_at, findings(id, kind, claim, evidence, source_url, confidence, created_at)",
+    )
+    .eq("agent_id", ANAKIN_AGENT_ID)
+    .eq("report_type", RADAR_REPORT_TYPE)
+    .in("findings.kind", [...PULS_KINDS])
+    .order("created_at", { ascending: false })
+    .limit(limit)
+  if (error) return fail(error.message)
+  const rows = (data ?? []) as {
+    period: string
+    findings: RadarFinding[] | null
+  }[]
+  return {
+    ok: true,
+    points: pulsHistoryOf(
+      rows.map((r) => ({ period: r.period, findings: r.findings ?? [] })),
+    ),
+  }
+}
+
 export type RunStateResult = { ok: true; state: RunStateRow | null } | ReadError
 
 export async function fetchRunState(
@@ -72,7 +112,9 @@ export async function fetchRunState(
   const supabase = createSupabaseServerClient()
   const { data, error } = await supabase
     .from("run_state")
-    .select("agent_id, last_successful_run, last_run_status, last_error, updated_at")
+    .select(
+      "agent_id, last_successful_run, last_run_status, last_error, updated_at",
+    )
     .eq("agent_id", agentId)
     .maybeSingle()
   if (error) return fail(error.message)
