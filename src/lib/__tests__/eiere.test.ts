@@ -30,6 +30,10 @@ const PULS_0908 =
 const PULS_0905 =
   "Detox.no salgspuls (LIVE via Shopify, 05:05 UTC 2026-09-05): siste 7 dager 179 ordrer / 206 254 NOK mot 188 ordrer / 195 864 NOK uken før — omsetning +5,3 %, ordrer -4,8 %, snittordreverdi +10,6 % til 1 152 NOK."
 
+// period 2026-09-10 — kortformen Anakin gikk over til 10.09 (kind=data).
+const PULS_0910 =
+  "Salgspuls ned denne uken: 03.09–10.09 = 165 ordrer / 181 704 NOK / AOV 1 101 NOK vs forrige uke 27.08–03.09 = 183 / 206 724 (−9,8 % ordrer, −12,1 % omsetning). «Rolig/søvn»-komplekset vokser: L-Theanine (13 stk, ny #3) og Magnesium Threonate (10 stk, ny #5) på topp-5; Paratox falt 18→7; Liver Sauce ute av topp-5. Siste 24t: 29 ordrer / 29 818 NOK."
+
 function finding(partial: Partial<RadarFinding> & { claim: string }): RadarFinding {
   return {
     id: partial.id ?? "f-" + partial.claim.slice(0, 8),
@@ -79,6 +83,7 @@ describe("parsePulsClaim", () => {
   })
   it("gir null naar moensteret ikke treffer — aldri et gjettet tall", () => {
     expect(parsePulsClaim("Salgspuls: bra uke, ca 200 ordrer.")).toBeNull()
+    expect(parsePulsClaim("Salgspuls: 03.09–10.09 = 165 ordrer vs forrige uke")).toBeNull()
     expect(parsePulsClaim("")).toBeNull()
   })
 })
@@ -111,6 +116,24 @@ describe("findPuls", () => {
       findingId: "p",
       raw: "Detox.no salgspuls: rekorduke!",
     })
+  })
+  it("finner kortformen som kind=data (10.09) og parser den", () => {
+    const r = findPuls([
+      finding({ kind: "signal", claim: "Klaviyo-stillheten brytes i dag" }),
+      finding({ id: "d", kind: "data", claim: PULS_0910 }),
+    ])
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.findingId).toBe("d")
+      expect(r.puls).toEqual({
+        orders7d: 165,
+        revenue7d: 181704,
+        ordersPrev: 183,
+        revenuePrev: 206724,
+        revenueDeltaPct: -12.1,
+        ordersDeltaPct: -9.8,
+      })
+    }
   })
   it("ignorerer signal-funn som ikke er salgspuls", () => {
     const r = findPuls([

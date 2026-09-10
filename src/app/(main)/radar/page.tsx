@@ -225,7 +225,7 @@ function PulsBand({ report }: { report: RadarReport }) {
   const res = findPuls(report.findings)
   const prov = (
     <Provenance>
-      findings · kind=signal · report {report.period} · Anakins egen
+      findings · kind=signal/data · report {report.period} · Anakins egen
       Shopify-lesing i nattens radar, ikke et nytt Shopify-kall · ref{" "}
       {DETOX_PROJECT_REF}
     </Provenance>
@@ -235,7 +235,7 @@ function PulsBand({ report }: { report: RadarReport }) {
       <OsCard title="Puls — siste 7 dager">
         {res.reason === "no_signal" ? (
           <Empty title="Radaren for denne dagen har ingen salgspuls.">
-            Ingen findings-rad med kind=signal og «salgspuls» i rapport{" "}
+            Ingen findings-rad med kind=signal/data og «salgspuls» i rapport{" "}
             {report.period}.
           </Empty>
         ) : (
