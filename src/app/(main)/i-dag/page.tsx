@@ -391,9 +391,13 @@ export default function IDagPage() {
             barGradient="linear-gradient(90deg, var(--os-accent), var(--os-purple))"
           />
           <OsKpiCard
-            label="Konvertering" tooltip="Andel besokende som legger inn en ordre. Bransjesnitt er 1-3%."
-            value="2.4%"
-            delta="+0.1%"
+            label="AOV"
+            tooltip="Average Order Value: gjennomsnittlig ordreverdi. Hoyere AOV = bedre margin."
+            value={
+              metrics && metrics.totals.shopifyOrders && metrics.totals.shopifyOrders > 0
+                ? kr(metrics.totals.shopifyRevenue / metrics.totals.shopifyOrders)
+                : "n/a"
+            }
             width="48%"
           />
         </div>
