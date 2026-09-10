@@ -16,10 +16,13 @@ import {
   DECISIONS,
   findDuplicateRequest,
   isDecision,
+  isRefRequestType,
   isRequestType,
   QUEUE_STATUSES,
+  refKey,
   REQUEST_TYPES,
   requestBodyHead,
+  type RefTable,
   type RequestRow,
 } from "@/lib/eiere"
 
@@ -27,11 +30,111 @@ export type ActionResult =
   | { ok: true; row: RequestRow; duplicate: boolean }
   | {
       ok: false
-      code: "unauthenticated" | "forbidden" | "invalid" | "not_in_queue" | "db"
+      code:
+        | "unauthenticated"
+        | "forbidden"
+        | "invalid"
+        | "not_found"
+        | "not_in_queue"
+        | "db"
       error: string
     }
 
 const REQUEST_COLUMNS = "id, requester, kind, body, status, created_at"
+const UUID_RE = /^[0-9a-f-]{36}$/i
+
+function validPeriod(v: unknown): string | null {
+  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null
+}
+
+/** Kolonnen som baerer teksten eieren ser, per tabell en ref kan peke paa. */
+const REF_TEXT_COLUMN: Record<RefTable, string> = {
+  recommendations: "action",
+  findings: "claim",
+  content_items: "title",
+}
+
+/**
+ * "Be Anakin gjøre dette" / "Forklar dette funnet" / "Lag utkast til dette" —
+ * en forespoersel som peker paa én rad. Klienten sender bare id; teksten leses
+ * fra basen med brukerens egen session (RLS), aldri fra klienten. Idempotent
+ * per (type, radar-periode, ref).
+ */
+export async function createRefRequestAction(input: {
+  type: string
+  refId: string
+  period: string | null
+}): Promise<ActionResult> {
+  const user = await requireDetoxUser()
+  if (!user)
+    return { ok: false, code: "unauthenticated", error: "Ikke innlogget" }
+  if (!hasScope(user.scopes, "work:write"))
+    return {
+      ok: false,
+      code: "forbidden",
+      error: "Mangler tilgang (work:write)",
+    }
+  if (!isRefRequestType(input.type))
+    return { ok: false, code: "invalid", error: "Ukjent forespørselstype" }
+  if (typeof input.refId !== "string" || !UUID_RE.test(input.refId))
+    return { ok: false, code: "invalid", error: "Ugyldig id" }
+  const period = validPeriod(input.period)
+  const table: RefTable = REQUEST_TYPES[input.type].ref
+  const column = REF_TEXT_COLUMN[table]
+
+  const supabase = createSupabaseServerClient()
+  const found = await supabase
+    .from(table)
+    .select(`id, ${column}`)
+    .eq("id", input.refId)
+    .maybeSingle()
+  if (found.error) return { ok: false, code: "db", error: found.error.message }
+  const text = (found.data as Record<string, unknown> | null)?.[column]
+  if (typeof text !== "string" || text.trim() === "")
+    return {
+      ok: false,
+      code: "not_found",
+      error: "Fant ikke raden det pekes på",
+    }
+
+  const key = refKey(table, input.refId)
+  const head = requestBodyHead(input.type, period, key)
+  const existing = await supabase
+    .from("requests")
+    .select(REQUEST_COLUMNS)
+    .in("status", [...QUEUE_STATUSES])
+    .like("body", `${head}%`)
+  if (existing.error)
+    return { ok: false, code: "db", error: existing.error.message }
+  const dup = findDuplicateRequest(
+    (existing.data ?? []) as RequestRow[],
+    input.type,
+    period,
+    key,
+  )
+  if (dup) return { ok: true, row: dup, duplicate: true }
+
+  const inserted = await supabase
+    .from("requests")
+    .insert({
+      requester: user.actorLabel,
+      kind: REQUEST_TYPES[input.type].kind,
+      body: buildRequestBody({
+        type: input.type,
+        period,
+        requestedBy: user.actorLabel,
+        ref: { key, text },
+      }),
+      status: "open",
+    })
+    .select(REQUEST_COLUMNS)
+    .single()
+  if (inserted.error)
+    return { ok: false, code: "db", error: inserted.error.message }
+
+  revalidatePath("/eiere")
+  return { ok: true, row: inserted.data as RequestRow, duplicate: false }
+}
 
 /**
  * "Be Anakin: …" — legger en forespoersel i koeen. Idempotent per (type,
@@ -43,15 +146,17 @@ export async function createRequestAction(input: {
   period: string | null
 }): Promise<ActionResult> {
   const user = await requireDetoxUser()
-  if (!user) return { ok: false, code: "unauthenticated", error: "Ikke innlogget" }
+  if (!user)
+    return { ok: false, code: "unauthenticated", error: "Ikke innlogget" }
   if (!hasScope(user.scopes, "work:write"))
-    return { ok: false, code: "forbidden", error: "Mangler tilgang (work:write)" }
-  if (!isRequestType(input.type))
-    return { ok: false, code: "invalid", error: "Ukjent forespoerselstype" }
-  const period =
-    typeof input.period === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.period)
-      ? input.period
-      : null
+    return {
+      ok: false,
+      code: "forbidden",
+      error: "Mangler tilgang (work:write)",
+    }
+  if (!isRequestType(input.type) || isRefRequestType(input.type))
+    return { ok: false, code: "invalid", error: "Ukjent forespørselstype" }
+  const period = validPeriod(input.period)
 
   const supabase = createSupabaseServerClient()
   const head = requestBodyHead(input.type, period)
@@ -97,12 +202,17 @@ export async function decideRequestAction(input: {
   decision: string
 }): Promise<ActionResult> {
   const user = await requireDetoxUser()
-  if (!user) return { ok: false, code: "unauthenticated", error: "Ikke innlogget" }
+  if (!user)
+    return { ok: false, code: "unauthenticated", error: "Ikke innlogget" }
   if (!isDecision(input.decision))
     return { ok: false, code: "invalid", error: "Ukjent beslutning" }
   const def = DECISIONS[input.decision]
   if (!hasScope(user.scopes, def.scope))
-    return { ok: false, code: "forbidden", error: `Mangler tilgang (${def.scope})` }
+    return {
+      ok: false,
+      code: "forbidden",
+      error: `Mangler tilgang (${def.scope})`,
+    }
   if (typeof input.id !== "string" || !/^[0-9a-f-]{36}$/i.test(input.id))
     return { ok: false, code: "invalid", error: "Ugyldig id" }
 
@@ -114,7 +224,8 @@ export async function decideRequestAction(input: {
     .in("status", [...QUEUE_STATUSES])
     .select(REQUEST_COLUMNS)
     .maybeSingle()
-  if (updated.error) return { ok: false, code: "db", error: updated.error.message }
+  if (updated.error)
+    return { ok: false, code: "db", error: updated.error.message }
   if (!updated.data)
     return {
       ok: false,
