@@ -99,7 +99,7 @@ function PulsBand({ report }: { report: RadarReport }) {
   const res = findPuls(report.findings)
   const prov = (
     <Provenance>
-      findings · kind=signal · report_id={report.id.slice(0, 8)}… ·
+      findings · kind=signal/data · report_id={report.id.slice(0, 8)}… ·
       reports.agent_id={ANAKIN_AGENT_ID} · report_type={RADAR_REPORT_TYPE} ·
       period={report.period} · ref {DETOX_PROJECT_REF}. Tallene er Anakins egen
       Shopify-lesing i nattens radar — ikke et nytt Shopify-kall.
@@ -110,7 +110,7 @@ function PulsBand({ report }: { report: RadarReport }) {
     return (
       <OsCard title="Puls — siste 7 dager">
         <Empty title="Radaren for denne dagen har ingen salgspuls.">
-          Ingen findings-rad med kind=signal og «salgspuls» i rapport {report.period}.
+          Ingen findings-rad med kind=signal/data og «salgspuls» i rapport {report.period}.
         </Empty>
         {prov}
       </OsCard>

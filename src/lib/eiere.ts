@@ -65,8 +65,12 @@ export type RunStateRow = {
 //   "Detox.no salgspuls (LIVE via Shopify, 05:30 UTC 2026-09-08): siste 7 dager
 //    (01.09-08.09, Europe/Amsterdam) 174 ordrer / 195 408,30 NOK mot 179 ordrer
 //    / 193 818,05 NOK uken før (25.08-01.09) — omsetning +0,8 %, ordrer -2,8 %, …"
-// Basen har ingen strukturert kolonne for dette. Vi parser defensivt og viser
-// raa tekst naar moensteret ikke treffer — aldri et gjettet tall.
+// Fra 2026-09-10 skriver Anakin ogsaa en kortform som kind=data:
+//   "Salgspuls ned denne uken: 03.09–10.09 = 165 ordrer / 181 704 NOK / AOV
+//    1 101 NOK vs forrige uke 27.08–03.09 = 183 / 206 724 (−9,8 % ordrer,
+//    −12,1 % omsetning). …"
+// Basen har ingen strukturert kolonne for dette. Vi parser defensivt (begge
+// formatene) og viser raa tekst naar ingen treffer — aldri et gjettet tall.
 
 export type Puls = {
   orders7d: number
@@ -95,11 +99,25 @@ export function parseNorwegianNumber(s: string): number | null {
 
 const PULS_RE =
   /siste 7 dager\s*(?:\([^)]*\))?\s*(\d[\d\s  ]*)\s*ordrer\s*\/\s*([\d\s  ]+(?:,\d+)?)\s*NOK\s+mot\s+(\d[\d\s  ]*)\s*ordrer\s*\/\s*([\d\s  ]+(?:,\d+)?)\s*NOK\s+uken f[øo]r/i
-const REVENUE_DELTA_RE = /omsetning\s*([+\-−]?\d+(?:,\d+)?)\s*%/i
-const ORDERS_DELTA_RE = /ordrer\s*([+\-−]?\d+(?:,\d+)?)\s*%/i
+// Kortformen (2026-09-10+): "dd.mm–dd.mm = N ordrer / X NOK [/ AOV Y NOK]
+// vs forrige uke [dd.mm–dd.mm] = M [ordrer] / Z [NOK]".
+const PULS_RE_V2 =
+  /\d{2}\.\d{2}\s*[–-]\s*\d{2}\.\d{2}\s*=\s*(\d[\d\s  ]*)\s*ordrer\s*\/\s*([\d\s  ]+(?:,\d+)?)\s*NOK(?:\s*\/\s*AOV\s*[\d\s  ]+(?:,\d+)?\s*NOK)?\s*vs\.?\s*forrige uke\s*(?:\d{2}\.\d{2}\s*[–-]\s*\d{2}\.\d{2})?\s*=\s*(\d[\d\s  ]*?)\s*(?:ordrer\s*)?\/\s*([\d\s  ]+(?:,\d+)?)/i
+
+// Prosent kan staa etter ordet ("omsetning +0,8 %") eller foer ("−12,1 % omsetning").
+const PCT = "([+\\-−]?\\d+(?:,\\d+)?)\\s*%"
+const REVENUE_DELTA_RE = new RegExp(`omsetning\\s*${PCT}|${PCT}\\s*omsetning`, "i")
+const ORDERS_DELTA_RE = new RegExp(`ordrer\\s*${PCT}|${PCT}\\s*ordrer`, "i")
+
+function deltaOf(re: RegExp, claim: string): number | null {
+  const m = re.exec(claim)
+  if (!m) return null
+  const raw = m[1] ?? m[2]
+  return raw ? parseNorwegianNumber(raw) : null
+}
 
 export function parsePulsClaim(claim: string): Puls | null {
-  const m = PULS_RE.exec(claim)
+  const m = PULS_RE.exec(claim) ?? PULS_RE_V2.exec(claim)
   if (!m) return null
   const orders7d = parseNorwegianNumber(m[1])
   const revenue7d = parseNorwegianNumber(m[2])
@@ -112,20 +130,21 @@ export function parsePulsClaim(claim: string): Puls | null {
     revenuePrev === null
   )
     return null
-  const rd = REVENUE_DELTA_RE.exec(claim)
-  const od = ORDERS_DELTA_RE.exec(claim)
   return {
     orders7d,
     revenue7d,
     ordersPrev,
     revenuePrev,
-    revenueDeltaPct: rd ? parseNorwegianNumber(rd[1]) : null,
-    ordersDeltaPct: od ? parseNorwegianNumber(od[1]) : null,
+    revenueDeltaPct: deltaOf(REVENUE_DELTA_RE, claim),
+    ordersDeltaPct: deltaOf(ORDERS_DELTA_RE, claim),
   }
 }
 
+/** Pulsen ligger som kind=signal (klassisk) eller kind=data (kortform fra 10.09). */
+export const PULS_KINDS = ["signal", "data"] as const
+
 export function isPulsFinding(f: Pick<RadarFinding, "kind" | "claim">): boolean {
-  return f.kind === "signal" && /salgspuls/i.test(f.claim)
+  return (PULS_KINDS as readonly string[]).includes(f.kind) && /salgspuls/i.test(f.claim)
 }
 
 export function findPuls(findings: readonly RadarFinding[]): PulsResult {
