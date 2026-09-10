@@ -7,6 +7,7 @@ export const siteConfig = {
     // Daglig
     eiere: "/eiere",
     idag: "/i-dag",
+    radar: "/radar",
     status: "/status",
     overview: "/overview",
     oversikt: "/oversikt",
