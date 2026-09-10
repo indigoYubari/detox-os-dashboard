@@ -13,6 +13,7 @@ import {
   Map,
   Megaphone,
   MessageSquare,
+  Radar,
   Settings,
   ShoppingBag,
   Sparkles,
@@ -44,6 +45,7 @@ export const navSections: NavSection[] = [
     items: [
       { name: "Eiere", href: siteConfig.baseLinks.eiere, icon: Users },
       { name: "I dag", href: siteConfig.baseLinks.idag, icon: LayoutDashboard },
+      { name: "Radar", href: siteConfig.baseLinks.radar, icon: Radar },
       { name: "Status", href: siteConfig.baseLinks.status, icon: Activity },
       {
         name: "Oversikt",
