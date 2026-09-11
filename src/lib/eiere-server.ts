@@ -14,11 +14,13 @@ import {
   pulsHistoryOf,
   QUEUE_STATUSES,
   RADAR_REPORT_TYPE,
+  threadsOf,
   type PulsPoint,
   type RadarFinding,
   type RadarReport,
   type RequestRow,
   type RunStateRow,
+  type Thread,
 } from "./eiere"
 
 export type ReadError = {
@@ -123,14 +125,48 @@ export async function fetchRunState(
 
 export type QueueResult = { ok: true; rows: RequestRow[] } | ReadError
 
-/** Alt som venter paa ja/nei/lest: status open eller in_progress. */
+/** Kolonnene slik de ligger i requests per 2026-09-11 (ingen delivery_id). */
+export const REQUEST_ROW_COLUMNS =
+  "id, requester, kind, body, status, created_at, response, responded_at, thread_id, parent_id"
+
+/**
+ * Alt som venter paa Anakin eller paa ja/nei/lest: status open eller
+ * in_progress, og uten svar. Rader Anakin har svart paa vises som samtaler
+ * (fetchThreads), ikke her — én rad, ett sted.
+ */
 export async function fetchQueue(): Promise<QueueResult> {
   const supabase = createSupabaseServerClient()
   const { data, error } = await supabase
     .from("requests")
-    .select("id, requester, kind, body, status, created_at")
+    .select(REQUEST_ROW_COLUMNS)
     .in("status", [...QUEUE_STATUSES])
+    .is("response", null)
     .order("created_at", { ascending: false })
   if (error) return fail(error.message)
   return { ok: true, rows: (data ?? []) as RequestRow[] }
+}
+
+export type ThreadsResult = { ok: true; threads: Thread[] } | ReadError
+
+/** Hvor mange rader som leses til «Svar og samtaler». */
+export const THREAD_ROWS = 60
+
+/**
+ * Anakins svar og traadene de hoerer til: rader med svar, eller som peker paa
+ * en traad. Gruppert per traad, nyeste aktivitet (responded_at, ellers
+ * created_at) foerst — samme regel som Anakins eget oppslag.
+ */
+export async function fetchThreads(
+  limit: number = THREAD_ROWS,
+): Promise<ThreadsResult> {
+  const supabase = createSupabaseServerClient()
+  const { data, error } = await supabase
+    .from("requests")
+    .select(REQUEST_ROW_COLUMNS)
+    .or("response.not.is.null,thread_id.not.is.null")
+    .order("responded_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(limit)
+  if (error) return fail(error.message)
+  return { ok: true, threads: threadsOf((data ?? []) as RequestRow[]) }
 }

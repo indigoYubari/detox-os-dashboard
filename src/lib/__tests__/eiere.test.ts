@@ -695,3 +695,210 @@ describe("grafgeometri", () => {
     expect(shortDate("uke 37")).toBe("uke 37")
   })
 })
+
+// ── Svar, traader og samtale (2026-09-11) ────────────────────────────────────
+
+import {
+  activeChatRefs,
+  activityAt,
+  buildChatThreadBody,
+  CHAT_THREAD_TYPE,
+  excerpt,
+  hasResponse,
+  isRefTable,
+  latestResponse,
+  threadKeyOf,
+  threadsOf,
+} from "../eiere"
+
+const row = (over: Partial<RequestRow> & { id: string }): RequestRow => ({
+  requester: "kim@detox.no",
+  kind: "followup",
+  body: "[chat_thread] til: agent-anakinbot · radar 2026-09-11 · ref findings/f2\nEieren åpner Telegram nå.",
+  status: "in_progress",
+  created_at: "2026-09-11T09:00:00Z",
+  response: null,
+  responded_at: null,
+  thread_id: null,
+  parent_id: null,
+  ...over,
+})
+
+describe("aktivitet og traad-noekkel", () => {
+  it("siste aktivitet er svartidspunktet naar det finnes, ellers opprettelsen", () => {
+    expect(activityAt(row({ id: "a" }))).toBe("2026-09-11T09:00:00Z")
+    expect(
+      activityAt(row({ id: "a", responded_at: "2026-09-11T10:00:00Z" })),
+    ).toBe("2026-09-11T10:00:00Z")
+  })
+  it("roten er sin egen traad; svar peker paa roten", () => {
+    expect(threadKeyOf(row({ id: "root" }))).toBe("root")
+    expect(threadKeyOf(row({ id: "x", thread_id: "root" }))).toBe("root")
+  })
+  it("hasResponse krever tekst, ikke bare en kolonne", () => {
+    expect(hasResponse(row({ id: "a" }))).toBe(false)
+    expect(hasResponse(row({ id: "a", response: "  " }))).toBe(false)
+    expect(hasResponse(row({ id: "a", response: "Ja." }))).toBe(true)
+    expect(hasResponse({})).toBe(false) // eldre lesning uten kolonnen
+  })
+})
+
+describe("threadsOf", () => {
+  const root = row({
+    id: "root",
+    created_at: "2026-09-11T09:00:00Z",
+    response: "Mottatt.",
+    responded_at: "2026-09-11T09:01:00Z",
+  })
+  const reply = row({
+    id: "reply",
+    status: "open",
+    thread_id: "root",
+    parent_id: "root",
+    created_at: "2026-09-11T09:30:00Z",
+  })
+  const older = row({
+    id: "older",
+    status: "done",
+    body: "[find_idea] til: agent-anakinbot · radar 2026-09-10\nFinn idé.",
+    created_at: "2026-09-10T20:00:00Z",
+    response: "Foreslo …",
+    responded_at: "2026-09-11T10:00:00Z",
+  })
+
+  it("grupperer per traad, meldinger i skriverekkefoelge, nyeste aktivitet foerst", () => {
+    // input nyeste-foerst slik basen leverer; older har nyest responded_at
+    const ts = threadsOf([reply, root, older])
+    expect(ts.map((t) => t.key)).toEqual(["older", "root"])
+    expect(ts[1].messages.map((m) => m.id)).toEqual(["root", "reply"])
+    expect(ts[1].root.id).toBe("root")
+    expect(ts[1].last.id).toBe("reply")
+    expect(ts[1].lastActivity).toBe("2026-09-11T09:30:00Z")
+  })
+  it("aktiv = minst én rad i koe-status; lukkes paa nyeste aktive rad", () => {
+    const ts = threadsOf([reply, root, older])
+    const chat = ts.find((t) => t.key === "root")!
+    expect(chat.active).toBe(true)
+    expect(chat.closeTarget?.id).toBe("reply")
+    const done = ts.find((t) => t.key === "older")!
+    expect(done.active).toBe(false)
+    expect(done.closeTarget).toBeNull()
+  })
+  it("siste svar i traaden er overskriften; ingen svar = null", () => {
+    const ts = threadsOf([reply, root])
+    expect(latestResponse(ts[0])?.id).toBe("root")
+    expect(latestResponse(threadsOf([reply])[0])).toBeNull()
+  })
+  it("svar uten rot i utvalget (rot utenfor limit) blir sin egen traad", () => {
+    const ts = threadsOf([reply])
+    expect(ts[0].key).toBe("root")
+    expect(ts[0].root.id).toBe("reply")
+  })
+  it("tom inn = tom ut", () => {
+    expect(threadsOf([])).toEqual([])
+  })
+})
+
+describe("samtale-rad (chat_thread)", () => {
+  it("hodet baerer type, mottaker, radar og ref — og kroppen har agent-anakinbot", () => {
+    const body = buildChatThreadBody({
+      period: "2026-09-11",
+      requestedBy: "kim@detox.no",
+      ref: { key: "findings/f2", text: "Megasporebiotic-PDP er fortsatt RØD" },
+    })
+    const lines = body.split("\n")
+    expect(lines[0]).toBe(
+      "[chat_thread] til: agent-anakinbot · radar 2026-09-11 · ref findings/f2",
+    )
+    expect(body).toContain("agent-anakinbot")
+    expect(body).toContain("Kontekst: «Megasporebiotic-PDP er fortsatt RØD»")
+    expect(body).toContain("kim@detox.no")
+    expect(body).not.toContain("delivery_id")
+    const p = parseRequestBody(body)
+    expect(p.type).toBe(CHAT_THREAD_TYPE)
+    expect(p.to).toBe("agent-anakinbot")
+    expect(p.period).toBe("2026-09-11")
+    expect(p.ref).toBe("findings/f2")
+  })
+  it("fortsettelse av traad: uten ref, med traad og forelder i teksten", () => {
+    const body = buildChatThreadBody({
+      period: null,
+      requestedBy: "kim@detox.no",
+      continues: { threadId: "root", parentId: "reply" },
+    })
+    expect(body.split("\n")[0]).toBe("[chat_thread] til: agent-anakinbot")
+    expect(body).toContain("Fortsetter tråd root (svar på reply).")
+    expect(body).not.toContain("Kontekst:")
+  })
+  it("idempotens per element: samme hode = duplikat, annen ref = ny", () => {
+    const existing = row({
+      id: "e",
+      status: "open",
+      body: buildChatThreadBody({
+        period: "2026-09-11",
+        requestedBy: "kim@detox.no",
+        ref: { key: "findings/f2", text: "x" },
+      }),
+    })
+    expect(
+      findDuplicateRequest(
+        [existing],
+        CHAT_THREAD_TYPE,
+        "2026-09-11",
+        "findings/f2",
+      )?.id,
+    ).toBe("e")
+    expect(
+      findDuplicateRequest(
+        [existing],
+        CHAT_THREAD_TYPE,
+        "2026-09-11",
+        "findings/f3",
+      ),
+    ).toBeNull()
+    expect(
+      findDuplicateRequest(
+        [{ ...existing, status: "done" }],
+        CHAT_THREAD_TYPE,
+        "2026-09-11",
+        "findings/f2",
+      ),
+    ).toBeNull()
+  })
+  it("samtalen er ikke en generell knapp, og ref-tabellene er lukket liste", () => {
+    expect(GENERIC_REQUEST_TYPES).not.toContain("chat_thread")
+    expect(GENERIC_REQUEST_TYPES).toEqual([
+      "generate_week",
+      "draft_email",
+      "find_idea",
+      "refresh_puls",
+    ])
+    expect(isRefTable("findings")).toBe(true)
+    expect(isRefTable("requests")).toBe(false)
+    expect(isRefTable(null)).toBe(false)
+  })
+  it("activeChatRefs: kun aapne/paagaaende samtaler med ref, ikke andre typer", () => {
+    const refs = activeChatRefs([
+      row({ id: "a", status: "open" }),
+      row({ id: "b", status: "done" }),
+      row({
+        id: "c",
+        status: "open",
+        body: "[explain_finding] til: agent-anakinbot · radar 2026-09-11 · ref findings/f9\nForklar.",
+      }),
+      row({
+        id: "d",
+        status: "in_progress",
+        body: "[chat_thread] til: agent-anakinbot\nFortsetter tråd a.",
+      }),
+    ])
+    expect(Array.from(refs)).toEqual(["findings/f2"])
+  })
+  it("excerpt klipper til én linje paa 160 tegn", () => {
+    expect(excerpt("kort")).toBe("kort")
+    const long = "x".repeat(200)
+    expect(excerpt(long).length).toBe(160)
+    expect(excerpt(long).endsWith("…")).toBe(true)
+    expect(excerpt("linje 1\n\nlinje 2")).toBe("linje 1 linje 2")
+  })
+})

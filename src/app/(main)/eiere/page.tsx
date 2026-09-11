@@ -14,29 +14,37 @@ import {
   type ContentItem,
 } from "@/lib/content"
 import {
+  activeChatRefs,
   ANAKIN_AGENT_ID,
   aovOf,
   briefingOf,
   DETOX_PROJECT_REF,
+  excerpt,
   findPuls,
+  hasResponse,
+  latestResponse,
   NEXT_MOVES,
   parseRequestBody,
   pctLabel,
   planOf,
   QUEUE_STATUSES,
   RADAR_REPORT_TYPE,
+  refKey,
   REQUEST_STATUS_LABELS,
   REQUEST_TYPES,
   requiresApproval,
   stripApprovalMark,
   telegramHref,
+  THREAD_STATUS_LABELS,
   WEEK_BUCKET_LABELS,
   weekBucketOf,
   type PulsPoint,
   type RadarFinding,
   type RadarRecommendation,
   type RadarReport,
+  type RefTable,
   type RequestRow,
+  type Thread,
   type WeekBucket,
 } from "@/lib/eiere"
 import {
@@ -44,6 +52,8 @@ import {
   fetchPulsHistory,
   fetchQueue,
   fetchRunState,
+  fetchThreads,
+  THREAD_ROWS,
   type ReadError,
 } from "@/lib/eiere-server"
 
@@ -52,13 +62,43 @@ import { PulsChart } from "./PulsChart"
 import { QueueActions } from "./QueueActions"
 import { RefRequestButton } from "./RefRequestButton"
 import { RequestButtons } from "./RequestButtons"
+import { TalkButton } from "./TalkButton"
+import { ThreadClose } from "./ThreadClose"
 
-// Eier-oversikt (Kim og Anniken). Fem bånd — PULS, Plan, Briefing, Kø, Uken —
-// alle lest med brukerens egen session (RLS). Hovedsiden viser overskrifter;
-// hele saken ligger bak «Åpne». Alle knapper skriver til `requests` og
+// Eier-oversikt (Kim og Anniken). Seks bånd — PULS, Plan, Briefing, Svar og
+// samtaler, Kø, Uken — alle lest med brukerens egen session (RLS). Hovedsiden
+// viser overskrifter; hele saken ligger bak «Åpne». Hvert element har to
+// knapper: «Åpne» (mer tekst) og «Snakk om dette» (Vei A: kontekst-rad i
+// requests, deretter Telegram). Alle knapper skriver til `requests` og
 // ingenting annet. Ingen chatbot, ingen publisering. Tom og feil skal se
 // tomme/feil ut. Ingen mock-tall.
 export const dynamic = "force-dynamic"
+
+/** Det «Snakk om dette» trenger paa hvert element: bot-lenka og hvilke
+ *  elementer som allerede har en aapen samtale. */
+type Talk = { botHref: string | null; active: ReadonlySet<string> }
+
+function TalkAbout({
+  talk,
+  table,
+  id,
+  period,
+}: {
+  talk: Talk
+  table: RefTable
+  id: string
+  period: string | null
+}) {
+  return (
+    <TalkButton
+      refTable={table}
+      refId={id}
+      period={period}
+      botHref={talk.botHref}
+      active={talk.active.has(refKey(table, id))}
+    />
+  )
+}
 
 // ── små byggeklosser ─────────────────────────────────────────────────────────
 
@@ -247,10 +287,12 @@ function RecItem({
   r,
   period,
   tag,
+  talk,
 }: {
   r: RadarRecommendation
   period: string
   tag?: string
+  talk: Talk
 }) {
   const text = stripApprovalMark(r.action)
   const flagged = requiresApproval(r.action)
@@ -277,12 +319,18 @@ function RecItem({
           {r.owner ? ` · eier ${r.owner}` : ""} · {timeLabel(r.created_at)} ·
           recommendations/{r.id.slice(0, 8)}…
         </Meta>
-        <div className="mt-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <RefRequestButton
             type="do_recommendation"
             refId={r.id}
             period={period}
             label="Be Anakin gjøre dette"
+          />
+          <TalkAbout
+            talk={talk}
+            table="recommendations"
+            id={r.id}
+            period={period}
           />
         </div>
       </Openable>
@@ -295,11 +343,13 @@ function RecGroup({
   title,
   items,
   period,
+  talk,
 }: {
   tag: string
   title: string
   items: RadarRecommendation[]
   period: string
+  talk: Talk
 }) {
   if (items.length === 0) return null
   return (
@@ -312,7 +362,7 @@ function RecGroup({
       </div>
       <ul className="space-y-1">
         {items.map((r) => (
-          <RecItem key={r.id} r={r} period={period} />
+          <RecItem key={r.id} r={r} period={period} talk={talk} />
         ))}
       </ul>
     </div>
@@ -418,9 +468,11 @@ function PipelineChips({
 function PlanBand({
   report,
   week,
+  talk,
 }: {
   report: RadarReport
   week: { ok: true; items: ContentItem[] } | { ok: false; error: string }
+  talk: Talk
 }) {
   const plan = planOf(report)
   const restCount = plan.sporA.length + plan.sporB.length + plan.utenSpor.length
@@ -435,7 +487,13 @@ function PlanBand({
       ) : (
         <ol className="space-y-1">
           {plan.neste.map((r, i) => (
-            <RecItem key={r.id} r={r} period={report.period} tag={`${i + 1}`} />
+            <RecItem
+              key={r.id}
+              r={r}
+              period={report.period}
+              tag={`${i + 1}`}
+              talk={talk}
+            />
           ))}
         </ol>
       )}
@@ -454,12 +512,14 @@ function PlanBand({
               title="Anniken — personlig / refleksivt"
               items={plan.sporA}
               period={report.period}
+              talk={talk}
             />
             <RecGroup
               tag="Spor B"
               title="Detox — mekanisme / utdanning"
               items={plan.sporB}
               period={report.period}
+              talk={talk}
             />
           </div>
           <div className={plan.utenSpor.length > 0 ? "mt-5" : ""}>
@@ -468,6 +528,7 @@ function PlanBand({
               title="konkrete punkter"
               items={plan.utenSpor}
               period={report.period}
+              talk={talk}
             />
           </div>
         </div>
@@ -484,7 +545,8 @@ function PlanBand({
         (A1/B1 før A2/B2; uten prefiks først, i Anakins rekkefølge) ·{" "}
         {plan.avgjort} avgjort (approved/rejected/deferred) vises ikke · ja/nei
         på anbefalinger skjer i Telegram · «Be Anakin gjøre dette» legger en rad
-        i requests med ref recommendations/&lt;id&gt; · profitt = samme
+        i requests med ref recommendations/&lt;id&gt; · «Snakk om dette» =
+        [chat_thread]-rad med konteksten, så Telegram · profitt = samme
         findings-rad som pulsen, snittkurv beregnet · innholdsidéer =
         content_items (Buffer-idéer har ingen kilde i basen ennå) · ref{" "}
         {DETOX_PROJECT_REF}
@@ -495,7 +557,15 @@ function PlanBand({
 
 // ── 3. Briefing ──────────────────────────────────────────────────────────────
 
-function FindingItem({ f, period }: { f: RadarFinding; period: string }) {
+function FindingItem({
+  f,
+  period,
+  talk,
+}: {
+  f: RadarFinding
+  period: string
+  talk: Talk
+}) {
   const flagged = requiresApproval(f.claim)
   const text = stripApprovalMark(f.claim)
   return (
@@ -542,20 +612,21 @@ function FindingItem({ f, period }: { f: RadarFinding; period: string }) {
         <Meta>
           findings/{f.id.slice(0, 8)}… · {timeLabel(f.created_at)}
         </Meta>
-        <div className="mt-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <RefRequestButton
             type="explain_finding"
             refId={f.id}
             period={period}
             label="Forklar dette funnet"
           />
+          <TalkAbout talk={talk} table="findings" id={f.id} period={period} />
         </div>
       </Openable>
     </li>
   )
 }
 
-function BriefingBand({ report }: { report: RadarReport }) {
+function BriefingBand({ report, talk }: { report: RadarReport; talk: Talk }) {
   const b = briefingOf(report)
   const pendingRecs = report.recommendations.filter(
     (r) => r.status === "pending",
@@ -590,7 +661,12 @@ function BriefingBand({ report }: { report: RadarReport }) {
           <SectionLabel>Tre viktigste funn</SectionLabel>
           <ul className="space-y-1">
             {b.funn.map((f) => (
-              <FindingItem key={f.id} f={f} period={report.period} />
+              <FindingItem
+                key={f.id}
+                f={f}
+                period={report.period}
+                talk={talk}
+              />
             ))}
           </ul>
         </>
@@ -609,14 +685,172 @@ function BriefingBand({ report }: { report: RadarReport }) {
         {report.findings.length} · recommendations{" "}
         {report.recommendations.length} ({pendingRecs} pending — vises under
         Plan) · tre viktigste = høyest confidence, pulsen unntatt · «Forklar
-        dette funnet» legger en rad i requests med ref findings/&lt;id&gt; · ref{" "}
+        dette funnet» legger en rad i requests med ref findings/&lt;id&gt; ·
+        «Snakk om dette» = [chat_thread]-rad med konteksten, så Telegram · ref{" "}
         {DETOX_PROJECT_REF}
       </Provenance>
     </OsCard>
   )
 }
 
-// ── 4. Godkjenningskø ────────────────────────────────────────────────────────
+// ── 4. Svar og samtaler ──────────────────────────────────────────────────────
+// Anakin svarer i samme rad (response); basen stempler responded_at. En rad
+// med svar forsvinner ut av koeen, saa svarene trenger sitt eget baand. Traader
+// ([chat_thread]) vises som samtale i skriverekkefoelge; eieren lukker dem
+// med status=done. Ingen closed_at, ingen auto-utloep.
+
+function Bubble({
+  who,
+  at,
+  note,
+  children,
+}: {
+  who: string
+  at: string
+  note?: string
+  children: React.ReactNode
+}) {
+  const anakin = who === ANAKIN_AGENT_ID
+  return (
+    <div
+      className={`rounded-[var(--os-radius-sm)] border-[0.5px] p-2 ${
+        anakin
+          ? "border-[var(--os-border-accent)] bg-[var(--os-accent-dim)]"
+          : "border-[var(--os-border)]"
+      }`}
+    >
+      <p className="jbm text-[10px] text-[var(--os-text-muted)]">
+        {anakin ? "Anakin" : who} · {timeLabel(at)}
+        {note ? ` · ${note}` : ""}
+      </p>
+      <p className="mt-1 whitespace-pre-line text-sm text-[var(--os-text-secondary)]">
+        {children}
+      </p>
+    </div>
+  )
+}
+
+function ThreadItem({ t, botHref }: { t: Thread; botHref: string | null }) {
+  const root = parseRequestBody(t.root.body)
+  const label = root.type ? REQUEST_TYPES[root.type].label : t.root.kind
+  const latest = latestResponse(t)
+  const status = t.closeTarget?.status ?? t.last.status
+  return (
+    <li className="py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Tag>{label}</Tag>
+        <span className="jbm text-[10px] text-[var(--os-text-muted)]">
+          {THREAD_STATUS_LABELS[status] ?? status} · fra {t.root.requester} ·
+          siste aktivitet {timeLabel(t.lastActivity)} · {t.messages.length}{" "}
+          {t.messages.length === 1 ? "melding" : "meldinger"} · id{" "}
+          {t.key.slice(0, 8)}…
+        </span>
+      </div>
+      <Openable
+        headline={
+          <Headline>
+            {latest
+              ? excerpt(latest.response ?? "")
+              : "Ingen svar ennå — Anakin har saken."}
+          </Headline>
+        }
+      >
+        <div className="space-y-2">
+          {t.messages.map((m) => (
+            <React.Fragment key={m.id}>
+              <Bubble
+                who={m.requester}
+                at={m.created_at}
+                note={
+                  m.parent_id
+                    ? `svar på ${m.parent_id.slice(0, 8)}…`
+                    : undefined
+                }
+              >
+                {m.body}
+              </Bubble>
+              {hasResponse(m) ? (
+                <Bubble
+                  who={ANAKIN_AGENT_ID}
+                  at={m.responded_at ?? m.created_at}
+                >
+                  {m.response}
+                </Bubble>
+              ) : null}
+            </React.Fragment>
+          ))}
+        </div>
+        <Meta>
+          requests/{t.root.id}
+          {t.messages.length > 1 ? ` · thread_id ${t.key}` : ""}
+          {root.ref ? ` · ref ${root.ref}` : ""}
+          {root.period ? ` · radar ${root.period}` : ""}
+        </Meta>
+      </Openable>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <TalkButton
+          continues={{ threadId: t.key, parentId: t.last.id }}
+          period={root.period}
+          botHref={botHref}
+          label={t.active ? "Fortsett i Telegram" : "Ta opp igjen i Telegram"}
+        />
+        {t.closeTarget ? <ThreadClose row={t.closeTarget} /> : null}
+      </div>
+    </li>
+  )
+}
+
+function AnswersBand({
+  threads,
+  botHref,
+}: {
+  threads: { ok: true; threads: Thread[] } | ReadError
+  botHref: string | null
+}) {
+  const prov = (
+    <Provenance>
+      requests · response is not null eller thread_id is not null · de{" "}
+      {THREAD_ROWS} nyeste radene · gruppert per tråd (thread_id, roten selv har
+      null) · nyeste aktivitet først = coalesce(responded_at, created_at) desc,
+      samme regel som Anakins oppslag av aktiv tråd · Anakin skriver response
+      via PATCH, responded_at settes av trigger trg_set_responded_at · «Lukk
+      tråd» = status done på nyeste aktive rad, ingen closed_at · «Fortsett i
+      Telegram» = ny [chat_thread]-rad med thread_id/parent_id · ref{" "}
+      {DETOX_PROJECT_REF}.
+    </Provenance>
+  )
+  if (!threads.ok) {
+    return (
+      <OsCard title="Svar og samtaler">
+        <ErrorBox err={threads} table="requests" />
+        {prov}
+      </OsCard>
+    )
+  }
+  const active = threads.threads.filter((t) => t.active).length
+  return (
+    <OsCard
+      title={`Svar og samtaler — ${threads.threads.length}${active > 0 ? ` (${active} pågår)` : ""}`}
+    >
+      {threads.threads.length === 0 ? (
+        <Empty title="Ingen svar fra Anakin ennå.">
+          Ingen rader i requests har response satt. Når Anakin svarer på en
+          bestilling eller en samtale, dukker den opp her med hele teksten bak
+          «Åpne».
+        </Empty>
+      ) : (
+        <ul className="divide-y-[0.5px] divide-[var(--os-border)]">
+          {threads.threads.map((t) => (
+            <ThreadItem key={t.key} t={t} botHref={botHref} />
+          ))}
+        </ul>
+      )}
+      {prov}
+    </OsCard>
+  )
+}
+
+// ── 5. Godkjenningskø ────────────────────────────────────────────────────────
 
 function QueueBand({
   queue,
@@ -627,7 +861,8 @@ function QueueBand({
 }) {
   const prov = (
     <Provenance>
-      requests · status in ({QUEUE_STATUSES.join(", ")}) · alle
+      requests · status in ({QUEUE_STATUSES.join(", ")}) · response is null
+      (rader Anakin har svart på ligger under «Svar og samtaler») · alle
       requester-verdier (Anakin skriver som {ANAKIN_AGENT_ID}, eiere som e-post)
       · ref {DETOX_PROJECT_REF}. Godkjenn = done, avvis = cancelled, marker lest
       = in_progress. Kun status-kolonnen endres. Annonseforslag
@@ -649,9 +884,9 @@ function QueueBand({
     <OsCard title={`Godkjenningskø — ${queue.rows.length} venter`}>
       {queue.rows.length === 0 ? (
         <Empty title="Køen er tom.">
-          Ingen rader i requests med status open eller in_progress. Bruk
-          knappene i planen og briefingen for å be Anakin om noe; Anakin kan
-          også legge inn egne forespørsler her.
+          Ingen rader i requests med status open eller in_progress uten svar.
+          Bruk knappene i planen og briefingen for å be Anakin om noe; Anakin
+          kan også legge inn egne forespørsler her.
         </Empty>
       ) : (
         <ul className="divide-y-[0.5px] divide-[var(--os-border)]">
@@ -690,9 +925,9 @@ function QueueBand({
   )
 }
 
-// ── 5. Uken ──────────────────────────────────────────────────────────────────
+// ── 6. Uken ──────────────────────────────────────────────────────────────────
 
-function WeekItem({ it }: { it: ContentItem }) {
+function WeekItem({ it, talk }: { it: ContentItem; talk: Talk }) {
   return (
     <li className="rounded-[var(--os-radius-sm)] px-2 py-1.5 hover:bg-[var(--os-bg-hover)]">
       <Openable headline={<Headline>{it.title}</Headline>}>
@@ -731,6 +966,12 @@ function WeekItem({ it }: { it: ContentItem }) {
             period={null}
             label="Be Anakin: lag utkast"
           />
+          <TalkAbout
+            talk={talk}
+            table="content_items"
+            id={it.id}
+            period={null}
+          />
           <Link
             href="/innhold"
             className="jbm text-[10px] text-[var(--os-accent)]"
@@ -749,8 +990,10 @@ function WeekItem({ it }: { it: ContentItem }) {
 
 function WeekBand({
   week,
+  talk,
 }: {
   week: { ok: true; items: ContentItem[] } | { ok: false; error: string }
+  talk: Talk
 }) {
   const prov = (
     <Provenance>
@@ -758,7 +1001,8 @@ function WeekBand({
       7–14 dager» kan ikke utledes — dette er alt som er under arbeid) ·
       planlagt = stage_status complete, blokkert = blocked, venter =
       pending/needs_research · «lag utkast» legger en rad i requests med ref
-      content_items/&lt;id&gt; · ref {DETOX_PROJECT_REF}. Dypdykk: /innhold.
+      content_items/&lt;id&gt; · «Snakk om dette» = [chat_thread]-rad med
+      konteksten, så Telegram · ref {DETOX_PROJECT_REF}. Dypdykk: /innhold.
     </Provenance>
   )
   if (!week.ok) {
@@ -801,7 +1045,7 @@ function WeekBand({
               ) : (
                 <ul className="space-y-1">
                   {buckets[b].map((it) => (
-                    <WeekItem key={it.id} it={it} />
+                    <WeekItem key={it.id} it={it} talk={talk} />
                   ))}
                 </ul>
               )}
@@ -823,14 +1067,24 @@ function WeekBand({
 // ── Siden ────────────────────────────────────────────────────────────────────
 
 export default async function EierePage() {
-  const [radar, history, runState, queue, week] = await Promise.all([
+  const [radar, history, runState, queue, threads, week] = await Promise.all([
     fetchLatestRadar(),
     fetchPulsHistory(),
     fetchRunState(ANAKIN_AGENT_ID),
     fetchQueue(),
+    fetchThreads(),
     fetchContentItems(),
   ])
   const botHref = telegramHref(process.env.NEXT_PUBLIC_DETOX_TELEGRAM_BOT)
+  // Elementer med en aapen samtale: baade de som venter (koeen) og de Anakin
+  // alt har svart i (traadene).
+  const talk: Talk = {
+    botHref,
+    active: activeChatRefs([
+      ...(queue.ok ? queue.rows : []),
+      ...(threads.ok ? threads.threads.flatMap((t) => t.messages) : []),
+    ]),
+  }
 
   return (
     <>
@@ -839,9 +1093,10 @@ export default async function EierePage() {
           Eiere
         </h1>
         <p className="mt-1 text-sm text-[var(--os-text-secondary)]">
-          Puls, plan, briefing, godkjenningskø og uken — fra Anakins nattlige
-          Content Radar. Overskriftene står her; trykk «Åpne» for hele saken.
-          Knappene legger oppgaver i køen til Anakin; dialogen skjer i Telegram.
+          Puls, plan, briefing, svar, godkjenningskø og uken — fra Anakins
+          nattlige Content Radar. Overskriftene står her; trykk «Åpne» for hele
+          saken, «Snakk om dette» for å ta det opp med Anakin i Telegram.
+          Knappene legger oppgaver i køen; dialogen skjer i Telegram.
         </p>
         <Provenance>
           {runState.ok
@@ -880,13 +1135,14 @@ export default async function EierePage() {
         ) : (
           <>
             <PulsBand report={radar.report} history={history} />
-            <PlanBand report={radar.report} week={week} />
-            <BriefingBand report={radar.report} />
+            <PlanBand report={radar.report} week={week} talk={talk} />
+            <BriefingBand report={radar.report} talk={talk} />
           </>
         )}
 
+        <AnswersBand threads={threads} botHref={botHref} />
         <QueueBand queue={queue} botHref={botHref} />
-        <WeekBand week={week} />
+        <WeekBand week={week} talk={talk} />
       </div>
     </>
   )
