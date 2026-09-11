@@ -50,6 +50,15 @@ export type RequestRow = {
   body: string
   status: "open" | "in_progress" | "done" | "cancelled" | string
   created_at: string
+  /** Anakins svar (PATCH fra Hermes). Kolonnene kom 2026-09-11; eldre
+   *  lesninger kan mangle dem, derfor valgfrie. responded_at settes av
+   *  trigger trg_set_responded_at i basen — aldri av dashboardet. */
+  response?: string | null
+  responded_at?: string | null
+  /** Tråd: rot-raden har thread_id null; svar i tråden peker på roten
+   *  (thread_id) og på raden de svarer på (parent_id). */
+  thread_id?: string | null
+  parent_id?: string | null
 }
 
 export type RunStateRow = {
@@ -228,7 +237,9 @@ export function pulsHistoryOf(
     const res = findPuls(r.findings)
     if (res.ok) byPeriod.set(r.period, res.puls)
   }
-  const sorted = Array.from(byPeriod.entries()).sort(([a], [b]) => a.localeCompare(b))
+  const sorted = Array.from(byPeriod.entries()).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )
   const out: PulsPoint[] = []
   for (const [period, puls] of sorted) {
     const prev = out[out.length - 1]
@@ -455,11 +466,33 @@ export const REQUEST_TYPES = {
     prompt:
       "Lag utkast til dette innholdselementet i Annikens stemme. Kun utkast — publiser ingenting.",
   },
+  // «Snakk om dette» (Vei A): raden er kontekst-baereren for en samtale som
+  // fortsetter i Telegram. Anakin holder den in_progress og slaar opp nyeste
+  // aktive traad naar eieren skriver uten saks-id. Eieren lukker den (done)
+  // fra dashboardet. ref kan peke paa hvilken som helst av tabellene, eller
+  // ingen (fortsettelse av en traad).
+  chat_thread: {
+    label: "Samtale",
+    kind: "followup",
+    ref: "any",
+    prompt:
+      "Eieren åpner Telegram nå for å snakke om dette. Svar på det de skriver der, med denne konteksten. Publiser og send ingenting uten godkjenning.",
+  },
 } as const
 
 export type RequestType = keyof typeof REQUEST_TYPES
 
 export type RefTable = "recommendations" | "findings" | "content_items"
+
+export const REF_TABLES: readonly RefTable[] = [
+  "recommendations",
+  "findings",
+  "content_items",
+]
+
+export function isRefTable(v: unknown): v is RefTable {
+  return typeof v === "string" && (REF_TABLES as readonly string[]).includes(v)
+}
 
 export type RefRequestType = {
   [K in RequestType]: (typeof REQUEST_TYPES)[K]["ref"] extends RefTable
@@ -467,7 +500,12 @@ export type RefRequestType = {
     : never
 }[RequestType]
 
-export type GenericRequestType = Exclude<RequestType, RefRequestType>
+export const CHAT_THREAD_TYPE = "chat_thread" satisfies RequestType
+
+export type GenericRequestType = Exclude<
+  RequestType,
+  RefRequestType | typeof CHAT_THREAD_TYPE
+>
 
 export function isRequestType(v: unknown): v is RequestType {
   return (
@@ -480,7 +518,7 @@ export function isRefRequestType(v: unknown): v is RefRequestType {
   return isRequestType(v) && REQUEST_TYPES[v].ref !== null
 }
 
-/** Knappene som ikke trenger en rad aa peke paa. */
+/** Knappene som ikke trenger en rad aa peke paa (samtalen har egen knapp). */
 export const GENERIC_REQUEST_TYPES = (
   Object.keys(REQUEST_TYPES) as RequestType[]
 ).filter((t): t is GenericRequestType => REQUEST_TYPES[t].ref === null)
@@ -530,6 +568,36 @@ export function buildRequestBody(input: {
     lines.push(def.prompt)
   }
   lines.push(`Bestilt fra detox-os-dashboard /eiere av ${input.requestedBy}.`)
+  return lines.join("\n")
+}
+
+/**
+ * Kroppen til en «Snakk om dette»-rad. Hodet er noekkelen (idempotens per
+ * element); resten er konteksten Anakin trenger foer eieren aapner Telegram.
+ * Maa inneholde agent-anakinbot (webhook-filteret er body-styrt) — det gjoer
+ * hodet. Ingen delivery_id: den finnes bare inne i Hermes.
+ */
+export function buildChatThreadBody(input: {
+  period: string | null
+  requestedBy: string
+  /** Elementet samtalen gjelder — utelatt naar traaden bare fortsettes. */
+  ref?: { key: string; text: string }
+  /** Sist i traaden, naar samtalen fortsetter en eksisterende traad. */
+  continues?: { threadId: string; parentId: string }
+}): string {
+  const def = REQUEST_TYPES[CHAT_THREAD_TYPE]
+  const lines = [
+    requestBodyHead(CHAT_THREAD_TYPE, input.period, input.ref?.key ?? null),
+    def.prompt,
+  ]
+  if (input.ref) lines.push(`Kontekst: «${clipText(input.ref.text)}»`)
+  if (input.continues)
+    lines.push(
+      `Fortsetter tråd ${input.continues.threadId} (svar på ${input.continues.parentId}).`,
+    )
+  lines.push(
+    `Startet fra detox-os-dashboard /eiere av ${input.requestedBy}. Eieren skriver fritt i Telegram; dette er saken.`,
+  )
   return lines.join("\n")
 }
 
@@ -609,6 +677,113 @@ export const REQUEST_STATUS_LABELS: Record<string, string> = {
   in_progress: "lest / paagaar",
   done: "godkjent",
   cancelled: "avvist",
+}
+
+/** Samme statuser, sett fra en samtale. */
+export const THREAD_STATUS_LABELS: Record<string, string> = {
+  open: "venter på Anakin",
+  in_progress: "pågår",
+  done: "lukket",
+  cancelled: "avvist",
+}
+
+// ── Svar og traader ──────────────────────────────────────────────────────────
+// Anakin skriver svaret i samme rad (response) og databasen stempler
+// responded_at. Koeen viser bare rader uten svar; alt med svar — eller som
+// hoerer til en traad — vises som samtaler, nyeste aktivitet foerst. Traaden
+// er thread_id (roten selv har null, saa noekkelen er thread_id ?? id).
+
+/** Siste aktivitet: svartidspunkt om det finnes, ellers opprettelse. */
+export function activityAt(r: RequestRow): string {
+  return r.responded_at ?? r.created_at
+}
+
+export function threadKeyOf(r: Pick<RequestRow, "id" | "thread_id">): string {
+  return r.thread_id ?? r.id
+}
+
+export function hasResponse(r: Pick<RequestRow, "response">): boolean {
+  return typeof r.response === "string" && r.response.trim() !== ""
+}
+
+export type Thread = {
+  key: string
+  /** Meldingene i den rekkefoelgen de ble skrevet. */
+  messages: RequestRow[]
+  root: RequestRow
+  last: RequestRow
+  lastActivity: string
+  /** Traaden lever saa lenge en rad i den fortsatt er open/in_progress. */
+  active: boolean
+  /** Raden eieren lukker for aa avslutte traaden (nyeste aktive). */
+  closeTarget: RequestRow | null
+}
+
+export function threadsOf(rows: readonly RequestRow[]): Thread[] {
+  const byKey = new Map<string, RequestRow[]>()
+  for (const r of rows) {
+    const k = threadKeyOf(r)
+    const list = byKey.get(k)
+    if (list) list.push(r)
+    else byKey.set(k, [r])
+  }
+  const threads: Thread[] = []
+  for (const [key, list] of Array.from(byKey.entries())) {
+    const messages = [...list].sort((a, b) =>
+      a.created_at.localeCompare(b.created_at),
+    )
+    const root = messages.find((m) => m.id === key) ?? messages[0]
+    const lastActivity = messages
+      .map(activityAt)
+      .reduce((a, b) => (b.localeCompare(a) > 0 ? b : a))
+    const activeRows = messages.filter(isInQueue)
+    const closeTarget =
+      activeRows.length === 0
+        ? null
+        : activeRows.reduce((a, b) =>
+            activityAt(b).localeCompare(activityAt(a)) > 0 ? b : a,
+          )
+    threads.push({
+      key,
+      messages,
+      root,
+      last: messages[messages.length - 1],
+      lastActivity,
+      active: activeRows.length > 0,
+      closeTarget,
+    })
+  }
+  return threads.sort((a, b) => b.lastActivity.localeCompare(a.lastActivity))
+}
+
+/** Det siste Anakin sa i traaden — overskriften i lista. null = ingen svar ennaa. */
+export function latestResponse(t: Thread): RequestRow | null {
+  for (let i = t.messages.length - 1; i >= 0; i--) {
+    if (hasResponse(t.messages[i])) return t.messages[i]
+  }
+  return null
+}
+
+export const EXCERPT_MAX = 160
+
+/** Én linje av en lengre tekst — til overskriften foer «Åpne». */
+export function excerpt(text: string, max: number = EXCERPT_MAX): string {
+  return clipText(text, max)
+}
+
+/**
+ * Elementer (ref-noekler) som allerede har en aapen/paagaaende samtale — da
+ * viser knappen «samtale pågår» i stedet for aa lage en ny rad. Samme
+ * idempotens som serveren, bare synlig foer klikket.
+ */
+export function activeChatRefs(rows: readonly RequestRow[]): Set<string> {
+  const out = new Set<string>()
+  for (const r of rows) {
+    if (!isInQueue(r)) continue
+    const p = parseRequestBody(r.body)
+    if (p.type === CHAT_THREAD_TYPE && p.ref) out.add(p.ref)
+  }
+  return out
 }
 
 // ── Telegram: lenke eller ferdig tekst — dashboardet sender aldri selv ──────

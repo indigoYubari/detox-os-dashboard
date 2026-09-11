@@ -10,6 +10,7 @@ const radar = vi.fn()
 const history = vi.fn()
 const runState = vi.fn()
 const queue = vi.fn()
+const threads = vi.fn()
 const content = vi.fn()
 
 vi.mock("../eiere-server", () => ({
@@ -17,6 +18,8 @@ vi.mock("../eiere-server", () => ({
   fetchPulsHistory: () => history(),
   fetchRunState: () => runState(),
   fetchQueue: () => queue(),
+  fetchThreads: () => threads(),
+  THREAD_ROWS: 60,
 }))
 vi.mock("../content-server", () => ({ fetchContentItems: () => content() }))
 vi.mock("next/headers", () => ({
@@ -189,9 +192,75 @@ beforeEach(() => {
   })
   content.mockResolvedValue({ ok: true, items: [] })
   queue.mockResolvedValue({ ok: true, rows: [] })
+  threads.mockResolvedValue({ ok: true, threads: [] })
   radar.mockResolvedValue({ ok: true, report: REPORT })
   history.mockResolvedValue({ ok: true, points: HISTORY })
+  delete process.env.NEXT_PUBLIC_DETOX_TELEGRAM_BOT
 })
+
+// Ekte rader fra requests 2026-09-11 (Orions ende-til-ende-test + en besvart
+// bestilling), forkortet. Traaden er én rad med body + response.
+const ANSWERED_THREAD = {
+  key: "b26e6797-6f25-4b65-a53c-4e5aa54471e9",
+  messages: [
+    {
+      id: "b26e6797-6f25-4b65-a53c-4e5aa54471e9",
+      requester: "as.shikoba@gmail.com",
+      kind: "research",
+      body: "[find_idea] til: agent-anakinbot · radar 2026-09-10\nFinn den neste innholdsidéen ut fra siste Content Radar og salgspuls.",
+      status: "done",
+      created_at: "2026-09-10T20:03:51Z",
+      response:
+        "[find_idea] besvart i forrige kjøring: foreslo neste innholdsidé fra Content Radar 2026-09-10 + salgspuls (ankret i claims.md). Levert som Telegram-melding.",
+      responded_at: "2026-09-11T10:00:00Z",
+      thread_id: null,
+      parent_id: null,
+    },
+  ],
+  get root() {
+    return this.messages[0]
+  },
+  get last() {
+    return this.messages[0]
+  },
+  lastActivity: "2026-09-11T10:00:00Z",
+  active: false,
+  closeTarget: null,
+}
+
+const CHAT_ROOT = {
+  id: "bbbb2222-2222-2222-2222-222222222222",
+  requester: "orion@end-to-end.test",
+  kind: "followup",
+  body: "[chat_thread] til: agent-anakinbot · radar 2026-09-11 · ref findings/f2\nEieren åpner Telegram nå.\nKontekst: «Megasporebiotic-PDP er fortsatt RØD»",
+  status: "in_progress",
+  created_at: "2026-09-11T09:13:58Z",
+  response: "Chat-tråd mottatt: klar for samtale om Megasporebiotic-PDP-en.",
+  responded_at: "2026-09-11T09:15:00Z",
+  thread_id: null,
+  parent_id: null,
+}
+const CHAT_REPLY = {
+  id: "cccc3333-3333-3333-3333-333333333333",
+  requester: "as.shikoba@gmail.com",
+  kind: "followup",
+  body: "[chat_thread] til: agent-anakinbot · radar 2026-09-11\nFortsetter tråd bbbb2222-2222-2222-2222-222222222222.",
+  status: "open",
+  created_at: "2026-09-11T09:20:00Z",
+  response: null,
+  responded_at: null,
+  thread_id: "bbbb2222-2222-2222-2222-222222222222",
+  parent_id: "bbbb2222-2222-2222-2222-222222222222",
+}
+const ACTIVE_THREAD = {
+  key: CHAT_ROOT.id,
+  messages: [CHAT_ROOT, CHAT_REPLY],
+  root: CHAT_ROOT,
+  last: CHAT_REPLY,
+  lastActivity: "2026-09-11T09:20:00Z",
+  active: true,
+  closeTarget: CHAT_REPLY,
+}
 
 describe("/eiere — puls og graf", () => {
   it("viser PULS-tallene fra Anakins prosa, med provenance bak «Vis metadata»", async () => {
@@ -338,6 +407,85 @@ describe("/eiere — briefing, koe og uken", () => {
     expect(html).toContain("blogg-detox-no, nyhetsbrev-klaviyo")
     expect(html).toContain("workflows/content/stages/brief/output/magnesium.md")
     expect(html).toContain("Be Anakin: lag utkast")
+  })
+})
+
+describe("/eiere — svar og samtaler", () => {
+  it("viser Anakins svar som utdrag i lista og hele teksten bak Åpne, med bestillingen", async () => {
+    threads.mockResolvedValue({ ok: true, threads: [ANSWERED_THREAD] })
+    const html = await render()
+    expect(html).toContain("Svar og samtaler — 1")
+    expect(html).toContain("Finn neste idé")
+    expect(html).toContain("lukket · fra as.shikoba@gmail.com")
+    // utdraget (160 tegn) i overskriften, hele svaret i boblen
+    expect(html).toContain("foreslo neste innholdsidé fra Content Radar")
+    expect(html).toContain("Levert som Telegram-melding.")
+    expect(html).toContain("Finn den neste innholdsidéen ut fra siste")
+    expect(html).toContain("Anakin · ")
+    expect(html).toContain("Ta opp igjen i Telegram")
+    expect(html).not.toContain(">Lukk tråd<")
+    expect(html).toContain("requests/b26e6797-6f25-4b65-a53c-4e5aa54471e9")
+  })
+  it("en aktiv tråd vises som samtale i skriverekkefølge, med Lukk tråd og Fortsett", async () => {
+    threads.mockResolvedValue({ ok: true, threads: [ACTIVE_THREAD] })
+    const html = await render()
+    expect(html).toContain("Svar og samtaler — 1 (1 pågår)")
+    expect(html).toContain("Samtale")
+    expect(html).toContain("venter på Anakin · fra orion@end-to-end.test")
+    expect(html).toContain("2 meldinger")
+    const root = html.indexOf("Chat-tråd mottatt")
+    const reply = html.indexOf("Fortsetter tråd bbbb2222")
+    expect(root).toBeGreaterThan(0)
+    expect(reply).toBeGreaterThan(root)
+    expect(html).toContain("svar på bbbb2222…")
+    expect(html).toContain(">Lukk tråd<")
+    expect(html).toContain("Fortsett i Telegram")
+    expect(html).toContain("thread_id bbbb2222-2222-2222-2222-222222222222")
+    expect(html).toContain("ref findings/f2")
+  })
+  it("ingen svar: sier det, uten knapper", async () => {
+    const html = await render()
+    expect(html).toContain("Ingen svar fra Anakin ennå.")
+    expect(html).not.toContain(">Lukk tråd<")
+  })
+  it("kan ikke lese: feilboks, resten av siden lever", async () => {
+    threads.mockResolvedValue({
+      ok: false,
+      error: "permission denied for table requests",
+      code: "no_access",
+    })
+    const html = await render()
+    expect(html).toContain("Svar og samtaler")
+    expect(html).toContain("permission denied for table requests")
+    expect(html).toContain("Neste trekk")
+  })
+})
+
+describe("/eiere — to knapper: Åpne og Snakk om dette", () => {
+  it("hvert funn, hver anbefaling og hvert innholdselement har «Snakk om dette» ved siden av Be Anakin", async () => {
+    content.mockResolvedValue({ ok: true, items: [CONTENT_ITEM] })
+    const html = await render()
+    // 3 funn + 5 pending anbefalinger (3 neste + 2 rest) + 1 innholdselement
+    expect((html.match(/>Snakk om dette</g) ?? []).length).toBe(9)
+    expect((html.match(/>Forklar dette funnet</g) ?? []).length).toBe(3)
+    expect((html.match(/>Be Anakin gjøre dette</g) ?? []).length).toBe(5)
+    expect(html).toContain("Be Anakin: lag utkast")
+    // Samtalen er ikke en generell «Be Anakin: …»-knapp
+    expect(html).not.toContain("Be Anakin: samtale")
+  })
+  it("et element med åpen samtale viser «Samtale pågår» i stedet for ny rad — når boten er satt", async () => {
+    process.env.NEXT_PUBLIC_DETOX_TELEGRAM_BOT = "Anakin_1444_bot"
+    threads.mockResolvedValue({ ok: true, threads: [ACTIVE_THREAD] })
+    const html = await render()
+    expect(html).toContain("Samtale pågår · åpne Telegram")
+    expect((html.match(/>Snakk om dette</g) ?? []).length).toBe(7) // f2 byttet ut
+    expect(html).toContain('href="https://t.me/Anakin_1444_bot"')
+  })
+  it("uten bot-env: knappen finnes, men ingen t.me-lenke i HTML", async () => {
+    threads.mockResolvedValue({ ok: true, threads: [ACTIVE_THREAD] })
+    const html = await render()
+    expect(html).not.toContain("t.me/")
+    expect((html.match(/>Snakk om dette</g) ?? []).length).toBe(8)
   })
 })
 
