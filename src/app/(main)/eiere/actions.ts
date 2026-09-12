@@ -12,6 +12,7 @@ import { revalidatePath } from "next/cache"
 import { hasScope } from "@/lib/auth-policy"
 import { createSupabaseServerClient, requireDetoxUser } from "@/lib/auth-server"
 import {
+  awaitingAnakin,
   buildChatThreadBody,
   buildRequestBody,
   CHAT_THREAD_TYPE,
@@ -25,9 +26,11 @@ import {
   refKey,
   REQUEST_TYPES,
   requestBodyHead,
+  validMessage,
   type RefTable,
   type RequestRow,
 } from "@/lib/eiere"
+import { fetchThread, type ThreadRowsResult } from "@/lib/eiere-server"
 
 export type ActionResult =
   | { ok: true; row: RequestRow; duplicate: boolean }
@@ -249,6 +252,9 @@ export async function startChatThreadAction(input: {
   ref: { table: string; id: string } | null
   period: string | null
   continues: { threadId: string; parentId: string } | null
+  /** Eierens tekst fra kompositoren (kun sammen med continues). Da svarer
+   *  Anakin i response paa raden, og eieren leser det i dashbordet. */
+  message?: string | null
 }): Promise<ActionResult> {
   const user = await requireDetoxUser()
   if (!user)
@@ -273,6 +279,18 @@ export async function startChatThreadAction(input: {
       !UUID_RE.test(input.continues.parentId))
   )
     return { ok: false, code: "invalid", error: "Ugyldig tråd" }
+  const message =
+    input.message == null || input.message === ""
+      ? null
+      : validMessage(input.message)
+  if (input.message != null && input.message !== "" && !message)
+    return {
+      ok: false,
+      code: "invalid",
+      error: "Meldingen er tom eller for lang",
+    }
+  if (message && !input.continues)
+    return { ok: false, code: "invalid", error: "En melding hører til en tråd" }
 
   const supabase = createSupabaseServerClient()
   let ref: { key: string; text: string } | undefined
@@ -309,6 +327,15 @@ export async function startChatThreadAction(input: {
     )
     if (dup) return { ok: true, row: dup, duplicate: true }
   }
+  // Idempotens per traad: venter alt en rad i traaden paa Anakin (open/
+  // in_progress uten svar), lages ingen ny — én rad, én agent-kjoering.
+  // Knappen i vinduet er stengt i samme tilstand; dette er serverens sperre.
+  if (input.continues) {
+    const thread = await fetchThread(input.continues.threadId)
+    if (!thread.ok) return { ok: false, code: "db", error: thread.error }
+    const waiting = awaitingAnakin(thread.rows)
+    if (waiting) return { ok: true, row: waiting, duplicate: true }
+  }
 
   const inserted = await supabase
     .from("requests")
@@ -320,6 +347,7 @@ export async function startChatThreadAction(input: {
         requestedBy: user.actorLabel,
         ref,
         continues: input.continues ?? undefined,
+        message: message ?? undefined,
       }),
       status: "open",
       ...(input.continues
@@ -377,4 +405,26 @@ export async function decideRequestAction(input: {
 
   revalidatePath("/eiere")
   return { ok: true, row: updated.data as RequestRow, duplicate: false }
+}
+
+export type ThreadReadResult =
+  | { ok: true; rows: RequestRow[] }
+  | { ok: false; code: "unauthenticated" | "invalid" | "db"; error: string }
+
+/**
+ * Chat-vinduets polling: les én traad paa nytt med eierens session. Ren
+ * lesing — ingen skriving, ingen revalidate. Kalles hvert THREAD_POLL_MS
+ * mens vinduet er aapent og traaden lever.
+ */
+export async function readThreadAction(input: {
+  threadKey: string
+}): Promise<ThreadReadResult> {
+  const user = await requireDetoxUser()
+  if (!user)
+    return { ok: false, code: "unauthenticated", error: "Ikke innlogget" }
+  if (typeof input.threadKey !== "string" || !UUID_RE.test(input.threadKey))
+    return { ok: false, code: "invalid", error: "Ugyldig tråd" }
+  const r: ThreadRowsResult = await fetchThread(input.threadKey)
+  if (!r.ok) return { ok: false, code: "db", error: r.error }
+  return { ok: true, rows: r.rows }
 }

@@ -9,6 +9,8 @@
 export const DETOX_PROJECT_REF = "kwrjhyytvbcaiszbfria"
 export const ANAKIN_AGENT_ID = "agent-anakinbot"
 export const RADAR_REPORT_TYPE = "content-radar"
+/** Anakins fulle Content Radar som én tekst (findings.kind=brief), fra 2026-09-11. */
+export const OPERATOR_KORT_REPORT_TYPE = "operator-kort"
 
 // ── Rader slik de ligger i basen ─────────────────────────────────────────────
 
@@ -584,21 +586,42 @@ export function buildChatThreadBody(input: {
   ref?: { key: string; text: string }
   /** Sist i traaden, naar samtalen fortsetter en eksisterende traad. */
   continues?: { threadId: string; parentId: string }
+  /** Eierens egen tekst, skrevet i dashbordets kompositor. Da skjer dialogen
+   *  i basen (Anakin svarer i response paa denne raden), ikke i Telegram. */
+  message?: string
 }): string {
   const def = REQUEST_TYPES[CHAT_THREAD_TYPE]
+  const message = input.message?.trim() || null
   const lines = [
     requestBodyHead(CHAT_THREAD_TYPE, input.period, input.ref?.key ?? null),
-    def.prompt,
+    message ? DASHBOARD_REPLY_PROMPT : def.prompt,
   ]
   if (input.ref) lines.push(`Kontekst: «${clipText(input.ref.text)}»`)
+  if (message) lines.push(`Melding fra eieren: «${message}»`)
   if (input.continues)
     lines.push(
       `Fortsetter tråd ${input.continues.threadId} (svar på ${input.continues.parentId}).`,
     )
   lines.push(
-    `Startet fra detox-os-dashboard /eiere av ${input.requestedBy}. Eieren skriver fritt i Telegram; dette er saken.`,
+    message
+      ? `Skrevet i detox-os-dashboard /eiere av ${input.requestedBy}. Eieren leser svaret i dashbordet.`
+      : `Startet fra detox-os-dashboard /eiere av ${input.requestedBy}. Eieren skriver fritt i Telegram; dette er saken.`,
   )
   return lines.join("\n")
+}
+
+/** Hva Anakin bes om naar eieren skriver i dashbordet i stedet for Telegram. */
+export const DASHBOARD_REPLY_PROMPT =
+  "Eieren svarer i tråden fra dashbordet. Svar på meldingen under i denne radens response-kolonne — eieren ser svaret i /eiere. Publiser og send ingenting uten godkjenning."
+
+/** Lengste melding kompositoren sender (tegn, etter trim). */
+export const MESSAGE_MAX = 2000
+
+/** Trimmet tekst mellom 1 og MESSAGE_MAX tegn, ellers null. */
+export function validMessage(v: unknown): string | null {
+  if (typeof v !== "string") return null
+  const t = v.replace(/\r\n/g, "\n").trim()
+  return t.length >= 1 && t.length <= MESSAGE_MAX ? t : null
 }
 
 export type ParsedRequestBody = {
@@ -763,6 +786,20 @@ export function latestResponse(t: Thread): RequestRow | null {
   }
   return null
 }
+
+/**
+ * Raden i traaden som venter paa Anakin: i koe-status og uten svar. Da er
+ * kompositoren stengt — én aapen rad per traad, én agent-kjoering (samme
+ * idempotens som «Snakk om dette»). null = Anakin har svart paa alt.
+ */
+export function awaitingAnakin(
+  messages: readonly RequestRow[],
+): RequestRow | null {
+  return messages.find((m) => isInQueue(m) && !hasResponse(m)) ?? null
+}
+
+/** Hvor ofte et aapent chat-vindu spoer basen om nytt (ms). */
+export const THREAD_POLL_MS = 3000
 
 export const EXCERPT_MAX = 160
 
