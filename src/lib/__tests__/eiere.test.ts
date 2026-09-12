@@ -701,8 +701,12 @@ describe("grafgeometri", () => {
 import {
   activeChatRefs,
   activityAt,
+  awaitingAnakin,
   buildChatThreadBody,
   CHAT_THREAD_TYPE,
+  DASHBOARD_REPLY_PROMPT,
+  MESSAGE_MAX,
+  validMessage,
   excerpt,
   hasResponse,
   isRefTable,
@@ -900,5 +904,55 @@ describe("samtale-rad (chat_thread)", () => {
     expect(excerpt(long).length).toBe(160)
     expect(excerpt(long).endsWith("…")).toBe(true)
     expect(excerpt("linje 1\n\nlinje 2")).toBe("linje 1 linje 2")
+  })
+})
+
+describe("kompositoren (svar i tråden fra dashbordet)", () => {
+  it("meldingen ligger i kroppen med tråd og forelder, hodet har agent-anakinbot, og Anakin bes svare i response", () => {
+    const body = buildChatThreadBody({
+      period: "2026-09-11",
+      requestedBy: "kim@detox.no",
+      continues: { threadId: "root", parentId: "reply" },
+      message: "  Kan du ta med Akkermansia i karusellen?  ",
+    })
+    const lines = body.split("\n")
+    expect(lines[0]).toBe(
+      "[chat_thread] til: agent-anakinbot · radar 2026-09-11",
+    )
+    expect(lines[1]).toBe(DASHBOARD_REPLY_PROMPT)
+    expect(body).toContain(
+      "Melding fra eieren: «Kan du ta med Akkermansia i karusellen?»",
+    )
+    expect(body).toContain("Fortsetter tråd root (svar på reply).")
+    expect(body).toContain("Eieren leser svaret i dashbordet.")
+    expect(body).not.toContain("skriver fritt i Telegram")
+    expect(parseRequestBody(body).type).toBe(CHAT_THREAD_TYPE)
+  })
+  it("tom melding = vanlig Telegram-fortsettelse", () => {
+    const body = buildChatThreadBody({
+      period: null,
+      requestedBy: "kim@detox.no",
+      continues: { threadId: "root", parentId: "reply" },
+      message: "   ",
+    })
+    expect(body).toContain("skriver fritt i Telegram")
+    expect(body).not.toContain("Melding fra eieren")
+  })
+  it("validMessage: trim, 1..MESSAGE_MAX tegn, ellers null", () => {
+    expect(validMessage("  hei  ")).toBe("hei")
+    expect(validMessage("")).toBeNull()
+    expect(validMessage("   ")).toBeNull()
+    expect(validMessage(42)).toBeNull()
+    expect(validMessage("x".repeat(MESSAGE_MAX))).toHaveLength(MESSAGE_MAX)
+    expect(validMessage("x".repeat(MESSAGE_MAX + 1))).toBeNull()
+    expect(validMessage("a\r\nb")).toBe("a\nb")
+  })
+  it("awaitingAnakin: raden i koe-status uten svar; svart eller lukket = ingen", () => {
+    const waiting = row({ id: "w", status: "open" })
+    const answered = row({ id: "a", status: "in_progress", response: "Ja." })
+    const closed = row({ id: "c", status: "done" })
+    expect(awaitingAnakin([answered, waiting])?.id).toBe("w")
+    expect(awaitingAnakin([answered, closed])).toBeNull()
+    expect(awaitingAnakin([])).toBeNull()
   })
 })

@@ -10,6 +10,7 @@
 import { createSupabaseServerClient } from "./auth-server"
 import {
   ANAKIN_AGENT_ID,
+  OPERATOR_KORT_REPORT_TYPE,
   PULS_KINDS,
   pulsHistoryOf,
   QUEUE_STATUSES,
@@ -169,4 +170,82 @@ export async function fetchThreads(
     .limit(limit)
   if (error) return fail(error.message)
   return { ok: true, threads: threadsOf((data ?? []) as RequestRow[]) }
+}
+
+export type ThreadRowsResult = { ok: true; rows: RequestRow[] } | ReadError
+
+/** Hvor mange rader én traad kan ha i chat-vinduet. */
+export const THREAD_MAX_ROWS = 100
+
+/**
+ * Én traad, i skriverekkefoelge: roten (id = key) og alle rader som peker paa
+ * den (thread_id = key). Brukes av chat-vinduets polling — samme session,
+ * samme RLS, bare mindre data enn fetchThreads.
+ */
+export async function fetchThread(
+  key: string,
+  limit: number = THREAD_MAX_ROWS,
+): Promise<ThreadRowsResult> {
+  const supabase = createSupabaseServerClient()
+  const { data, error } = await supabase
+    .from("requests")
+    .select(REQUEST_ROW_COLUMNS)
+    .or(`id.eq.${key},thread_id.eq.${key}`)
+    .order("created_at", { ascending: true })
+    .limit(limit)
+  if (error) return fail(error.message)
+  return { ok: true, rows: (data ?? []) as RequestRow[] }
+}
+
+export type OperatorKort = {
+  id: string
+  period: string
+  created_at: string
+  /** Hele Content Radar-teksten (findings.claim, kind=brief). */
+  text: string
+}
+
+export type OperatorKortResult =
+  | { ok: true; kort: OperatorKort | null }
+  | ReadError
+
+/**
+ * Anakins fulle Content Radar (report_type=operator-kort): én rapport per dag
+ * med ett funn av kind=brief som baerer hele teksten. null = ingen ennaa.
+ */
+export async function fetchOperatorKort(): Promise<OperatorKortResult> {
+  const supabase = createSupabaseServerClient()
+  const { data, error } = await supabase
+    .from("reports")
+    .select("id, period, created_at, findings(id, kind, claim, created_at)")
+    .eq("agent_id", ANAKIN_AGENT_ID)
+    .eq("report_type", OPERATOR_KORT_REPORT_TYPE)
+    .order("created_at", { ascending: false })
+    .limit(1)
+  if (error) return fail(error.message)
+  const row = (data ?? [])[0] as
+    | {
+        id: string
+        period: string
+        created_at: string
+        findings:
+          | { id: string; kind: string; claim: string; created_at: string }[]
+          | null
+      }
+    | undefined
+  if (!row) return { ok: true, kort: null }
+  const findings = [...(row.findings ?? [])].sort((a, b) =>
+    a.created_at.localeCompare(b.created_at),
+  )
+  const brief = findings.find((f) => f.kind === "brief") ?? findings[0]
+  if (!brief) return { ok: true, kort: null }
+  return {
+    ok: true,
+    kort: {
+      id: row.id,
+      period: row.period,
+      created_at: row.created_at,
+      text: brief.claim,
+    },
+  }
 }

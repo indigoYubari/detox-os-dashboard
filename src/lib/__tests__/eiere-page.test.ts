@@ -12,6 +12,7 @@ const runState = vi.fn()
 const queue = vi.fn()
 const threads = vi.fn()
 const content = vi.fn()
+const kort = vi.fn()
 
 vi.mock("../eiere-server", () => ({
   fetchLatestRadar: () => radar(),
@@ -19,6 +20,7 @@ vi.mock("../eiere-server", () => ({
   fetchRunState: () => runState(),
   fetchQueue: () => queue(),
   fetchThreads: () => threads(),
+  fetchOperatorKort: () => kort(),
   THREAD_ROWS: 60,
 }))
 vi.mock("../content-server", () => ({ fetchContentItems: () => content() }))
@@ -195,8 +197,18 @@ beforeEach(() => {
   threads.mockResolvedValue({ ok: true, threads: [] })
   radar.mockResolvedValue({ ok: true, report: REPORT })
   history.mockResolvedValue({ ok: true, points: HISTORY })
+  kort.mockResolvedValue({ ok: true, kort: KORT })
   delete process.env.NEXT_PUBLIC_DETOX_TELEGRAM_BOT
 })
+
+// Ekte operator-kort 2026-09-12 (reports 1fd99b95, ett funn kind=brief,
+// 8 704 tegn), forkortet.
+const KORT = {
+  id: "1fd99b95-dd78-40d4-954d-afad0e7adfff",
+  period: "2026-09-12",
+  created_at: "2026-09-12T05:29:27Z",
+  text: "# 🌙 Content Radar — Detox & Anniken — 12.09.2026\n\n**PÅ MINNELSE: Megasporebiotic-PDP er fortsatt RØD**\n\n## 3 viktigste funn\n\n1. **Klaviyo-tallene ER HER — e-posten virker**\n2. Vitamin D\n3. Google Trends\n\n## Anbefalinger\n- B1 mekanisme-karusell",
+}
 
 // Ekte rader fra requests 2026-09-11 (Orions ende-til-ende-test + en besvart
 // bestilling), forkortet. Traaden er én rad med body + response.
@@ -536,5 +548,63 @@ describe("/eiere — tomt og feil", () => {
     const html = await render()
     expect(html).toContain("Køen er tom")
     expect(html).toContain("Ingen innholdselementer")
+  })
+})
+
+describe("/eiere — chat-vinduet", () => {
+  it("aktiv tråd med rad som venter: kompositoren finnes men er stengt, og siden sier at Anakin svarer", async () => {
+    threads.mockResolvedValue({ ok: true, threads: [ACTIVE_THREAD] })
+    const html = await render()
+    expect(html).toContain("Send til Anakin")
+    expect(html).toContain("Vent på Anakins svar før du skriver mer.")
+    expect(html).toContain("Anakin svarer… (rad cccc3333… er venter på Anakin")
+    expect(html).toMatch(/<textarea[^>]* disabled=""/)
+    // samtalen i skriverekkefoelge, Anakins svar som egen boble
+    const root = html.indexOf("Chat-tråd mottatt")
+    const reply = html.indexOf("Fortsetter tråd bbbb2222")
+    expect(reply).toBeGreaterThan(root)
+  })
+  it("besvart tråd: kompositoren er åpen, ingen venter-melding", async () => {
+    threads.mockResolvedValue({ ok: true, threads: [ANSWERED_THREAD] })
+    const html = await render()
+    expect(html).toContain("Send til Anakin")
+    expect(html).toContain("Skriv til Anakin…")
+    expect(html).not.toContain("Anakin svarer…")
+    expect(html).not.toMatch(/<textarea[^>]* disabled=""/)
+    expect(html).toContain("0/2000")
+  })
+  it("metadata sier at vinduet poller hvert 3. sekund", async () => {
+    threads.mockResolvedValue({ ok: true, threads: [ACTIVE_THREAD] })
+    const html = await render()
+    expect(html).toContain("henter tråden på nytt hvert 3. sekund")
+  })
+})
+
+describe("/eiere — hele Content Radar (operator-kort)", () => {
+  it("viser operator-kortet som overskrift med hele teksten bak Åpne", async () => {
+    const html = await render()
+    expect(html).toContain("Hele Content Radar")
+    expect(html).toContain("Content Radar 2026-09-12 som Anakin skrev den")
+    expect(html).toContain("Klaviyo-tallene ER HER — e-posten virker")
+    expect(html).toContain("B1 mekanisme-karusell")
+    expect(html).toContain("reports/1fd99b95-dd78-40d4-954d-afad0e7adfff")
+    expect(html).toContain("report_type=operator-kort")
+  })
+  it("ingen operator-kort: sier det med filter, ingen tom Åpne", async () => {
+    kort.mockResolvedValue({ ok: true, kort: null })
+    const html = await render()
+    expect(html).toContain("Ingen operator-kort i basen ennå")
+    expect(html).toContain("report_type=operator-kort")
+    expect(html).not.toContain("som Anakin skrev den")
+  })
+  it("kan ikke lese operator-kort: feilboks, briefingen lever", async () => {
+    kort.mockResolvedValue({
+      ok: false,
+      error: "permission denied for table reports",
+      code: "no_access",
+    })
+    const html = await render()
+    expect(html).toContain("Hele Content Radar")
+    expect(html).toContain("Tre viktigste funn")
   })
 })
