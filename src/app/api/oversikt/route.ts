@@ -152,20 +152,33 @@ async function valuesReportSum(
   )
 }
 
-// Best-effort listestørrelse. profile_count avvises av enkelte kontoer/revisjoner,
-// da returneres null og siden viser "ikke tilgjengelig" - MED grunn. Fram til
-// 2026-09-15 forsvant grunnen her (401/403 = noekkelen mangler lists:read,
-// kjent siden 2026-08-25), og kortet sto uforklart tomt for eierne.
+// Best-effort listestørrelse. profile_count finnes kun på Get List (én liste,
+// /api/lists/{id}/), ikke på Get Lists (samlingen) - Klaviyo svarte 400
+// «additional-fields must be in []» på samlingen (live 2026-09-15). Fram til
+// da ble det stille null, og siden viste «ikke tilgjengelig» uten grunn.
+// Henter listene først, saa profile_count per liste (maks MAX_LISTS), og
+// velger den største.
+const MAX_LISTS = 10
+
 async function largestListSize(): Promise<{
   size: number | null
   name: string | null
   reason: string | null
 }> {
+  const feil = async (res: Response, hva: string) => {
+    let detail: string | null = null
+    try {
+      detail = upstreamErrorSummary(await res.json())
+    } catch {
+      /* ikke JSON */
+    }
+    return `Klaviyo svarte ikke på ${hva} (status ${res.status}${detail ? `: ${detail}` : ""}).`
+  }
   try {
-    const res = await fetch(
-      "https://a.klaviyo.com/api/lists/?additional-fields[list]=profile_count",
-      { headers: KLAVIYO_HEADERS(), cache: "no-store" },
-    )
+    const res = await fetch("https://a.klaviyo.com/api/lists/", {
+      headers: KLAVIYO_HEADERS(),
+      cache: "no-store",
+    })
     if (res.status === 401 || res.status === 403) {
       return {
         size: null,
@@ -174,32 +187,40 @@ async function largestListSize(): Promise<{
           "Klaviyo-nøkkelen mangler tilgang til lister. Kontoeieren må utvide nøkkelens rettigheter.",
       }
     }
-    if (!res.ok) {
-      let detail: string | null = null
-      try {
-        detail = upstreamErrorSummary(await res.json())
-      } catch {
-        /* ikke JSON */
-      }
-      return {
-        size: null,
-        name: null,
-        reason: `Klaviyo svarte ikke på listeoppslaget (status ${res.status}${detail ? `: ${detail}` : ""}).`,
-      }
-    }
+    if (!res.ok) return { size: null, name: null, reason: await feil(res, "listeoppslaget") }
     const json = (await res.json()) as {
-      data?: { attributes: { name: string; profile_count?: number } }[]
+      data?: { id: string; attributes?: { name?: string } }[]
     }
-    const lists = json.data ?? []
+    const lists = (json.data ?? []).slice(0, MAX_LISTS)
+    if (lists.length === 0) {
+      return { size: null, name: null, reason: "Ingen lister i Klaviyo-kontoen." }
+    }
+    const counted = await Promise.all(
+      lists.map(async (l) => {
+        const r = await fetch(
+          `https://a.klaviyo.com/api/lists/${encodeURIComponent(l.id)}/?additional-fields[list]=profile_count`,
+          { headers: KLAVIYO_HEADERS(), cache: "no-store" },
+        )
+        if (!r.ok) return { name: l.attributes?.name ?? null, count: null, reason: await feil(r, "listetelling") }
+        const j = (await r.json()) as {
+          data?: { attributes?: { name?: string; profile_count?: number } }
+        }
+        const c = j.data?.attributes?.profile_count
+        return {
+          name: j.data?.attributes?.name ?? l.attributes?.name ?? null,
+          count: typeof c === "number" ? c : null,
+          reason: null,
+        }
+      }),
+    )
     let best: { size: number | null; name: string | null; reason: string | null } = {
       size: null,
       name: null,
-      reason: "Klaviyo oppgir ikke antall profiler for listene.",
+      reason: counted.find((c) => c.reason)?.reason ?? "Klaviyo oppgir ikke antall profiler for listene.",
     }
-    for (const l of lists) {
-      const c = l.attributes?.profile_count
-      if (typeof c === "number" && (best.size === null || c > best.size)) {
-        best = { size: c, name: l.attributes?.name ?? null, reason: null }
+    for (const c of counted) {
+      if (c.count !== null && (best.size === null || c.count > best.size)) {
+        best = { size: c.count, name: c.name, reason: null }
       }
     }
     return best

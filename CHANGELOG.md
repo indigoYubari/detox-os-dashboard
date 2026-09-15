@@ -37,10 +37,15 @@ All notable changes to Detox OS Dashboard should be documented here.
   `backend_status`, `code` og `hint`. Rotårsak for proposals-502: ruta finnes
   ikke i ad-agentens `main` (ligger i umerget gren).
 - `/api/klaviyo/siste-kampanje`: 401/403 fra Klaviyo gir `klaviyo_forbidden` +
-  hint («nøkkelen mangler tilgang til kampanjer») i stedet for
-  `klaviyo_unavailable`. Rotårsak: nøkkelen mangler scopet `campaigns:read`
-  (kontoeier må utvide). Alle kilde-feilsvar bærer nå `code` + `hint`
+  hint i stedet for `klaviyo_unavailable`. Alle kilde-feilsvar bærer nå
+  `code` + `hint`, og ved annen feil `upstream_status` + `upstream_error`
   (`src/lib/source-state.ts`).
+- **Klaviyo-502 — faktisk rotårsak (live-diagnostisert samme dag):** ikke
+  scope. Klaviyo svarte 400 fordi (1) campaigns-kallet sendte `page[size]`,
+  som endepunktet ikke støtter, og (2) `profile_count` ble bedt om på
+  Get Lists (samlingen) der det ikke finnes — det finnes kun på Get List
+  (én liste). Begge rettet: campaigns uten `page[size]`, listestørrelse
+  hentes per liste.
 
 #### Depends on
 
