@@ -143,7 +143,9 @@ async function campaignRates(
             statistics: ["open_rate", "click_rate"],
             timeframe: { key: "last_12_months" },
             conversion_metric_id: metricId,
-            filter: `equals(campaign_id,"${campaignId}")`,
+            // Ikke filter paa campaign_id: live 2026-09-15 ga det 0 rader for
+            // en kampanje sendt fem dager foer. Rapporten grupperer per
+            // kampanje (groupings.campaign_id); vi plukker raden selv.
           },
         },
       }),
@@ -154,18 +156,21 @@ async function campaignRates(
     data?: {
       attributes?: {
         results?: {
+          groupings?: { campaign_id?: string }
           statistics?: { open_rate?: number; click_rate?: number }
         }[]
       }
     }
   }
   const results = json.data?.attributes?.results ?? []
-  const stats = results[0]?.statistics
+  const stats = results.find(
+    (r) => r.groupings?.campaign_id === campaignId,
+  )?.statistics
   if (!stats) {
     return {
       open_rate: null,
       click_rate: null,
-      grunn: `Klaviyo har ingen rapportrad for kampanjen ennå (${results.length} rader i svaret).`,
+      grunn: `Klaviyo har ingen rapportrad for kampanjen ennå (${results.length} kampanjer i rapporten).`,
     }
   }
   return {
