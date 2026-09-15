@@ -174,7 +174,11 @@ async function largestListSize(): Promise<{
       }
     }
     if (!res.ok) {
-      return { size: null, name: null, reason: "Klaviyo svarte ikke på listeoppslaget." }
+      return {
+        size: null,
+        name: null,
+        reason: `Klaviyo svarte ikke på listeoppslaget (status ${res.status}).`,
+      }
     }
     const json = (await res.json()) as {
       data?: { attributes: { name: string; profile_count?: number } }[]
