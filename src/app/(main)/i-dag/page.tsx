@@ -202,9 +202,10 @@ type GmailData = {
 }
 type KlaviyoKampanje = {
   kampanje_navn: string
-  open_rate: number
-  click_rate: number
+  open_rate: number | null
+  click_rate: number | null
   sendt_dato: string | null
+  rater_grunn?: string | null
 }
 type ShopifyIDag = {
   ordrer_i_dag: number
@@ -722,22 +723,32 @@ export default function IDagPage() {
                     className="text-[22px] font-medium text-[var(--os-text-primary)]"
                     style={{ letterSpacing: "-0.6px" }}
                   >
-                    {Math.round(klaviyo.data.open_rate * 100)}%
+                    {klaviyo.data.open_rate == null
+                      ? "–"
+                      : `${Math.round(klaviyo.data.open_rate * 100)}%`}
                   </p>
                   <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
                     siste open rate
                   </p>
                   <p className="mt-1 truncate text-[10px] text-[var(--os-text-secondary)]">
-                    {klaviyo.data.kampanje_navn} · klikk{" "}
-                    {(klaviyo.data.click_rate * 100).toFixed(1)}%
+                    {klaviyo.data.kampanje_navn}
+                    {klaviyo.data.click_rate != null &&
+                      ` · klikk ${(klaviyo.data.click_rate * 100).toFixed(1)}%`}
                   </p>
+                  {klaviyo.data.open_rate == null && klaviyo.data.rater_grunn && (
+                    <p className="mt-0.5 text-[10px] leading-snug text-[var(--os-text-muted)]">
+                      {klaviyo.data.rater_grunn}
+                    </p>
+                  )}
                 </div>
-                <div className="w-24">
-                  <Sparkline
-                    values={sparkFromSeed(klaviyo.data.open_rate * 100)}
-                    color="var(--os-purple)"
-                  />
-                </div>
+                {klaviyo.data.open_rate != null && (
+                  <div className="w-24">
+                    <Sparkline
+                      values={sparkFromSeed(klaviyo.data.open_rate * 100)}
+                      color="var(--os-purple)"
+                    />
+                  </div>
+                )}
               </div>
             )}
           </OsCard>
