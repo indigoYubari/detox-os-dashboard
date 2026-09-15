@@ -5,6 +5,7 @@ import {
   liveMeta,
   NotConfiguredError,
   sourceErrorResponse,
+  UpstreamStatusError,
   type LiveMeta,
 } from "@/lib/source-state"
 
@@ -24,12 +25,14 @@ const KLAVIYO_REVISION = "2024-10-15"
 // Noekkelen i prod er gyldig (metrics og values-reports virker), men mangler
 // campaigns:read - kjent siden 2026-08-25, eid av Klaviyo-kontoens eier.
 // Fram til 2026-09-15 ble det til "Kunne ikke hente" uten forklaring.
-function avvist(status: number, scope: string): ForbiddenError | null {
-  if (status !== 401 && status !== 403) return null
-  return new ForbiddenError(
-    `Klaviyo svarte ${status} - noekkelen mangler ${scope}`,
-    `Klaviyo-nøkkelen mangler tilgang til ${scope}. Kontoeieren må utvide nøkkelens rettigheter.`,
-  )
+function klaviyoFeil(status: number, scope: string, hva: string): Error {
+  if (status === 401 || status === 403) {
+    return new ForbiddenError(
+      `Klaviyo svarte ${status} - noekkelen mangler ${scope}`,
+      `Klaviyo-nøkkelen mangler tilgang til ${scope}. Kontoeieren må utvide nøkkelens rettigheter.`,
+    )
+  }
+  return new UpstreamStatusError(`Klaviyo ${hva} svarte ${status}`, status)
 }
 
 export const dynamic = "force-dynamic"
@@ -63,12 +66,7 @@ async function latestEmailCampaign(): Promise<LatestCampaign> {
     "?filter=equals(messages.channel,'email')" +
     "&sort=-created_at&page[size]=1"
   const res = await fetch(url, { headers: HEADERS(), cache: "no-store" })
-  if (!res.ok) {
-    throw (
-      avvist(res.status, "kampanjer") ??
-      new Error(`Klaviyo campaigns svarte ${res.status}`)
-    )
-  }
+  if (!res.ok) throw klaviyoFeil(res.status, "kampanjer", "campaigns")
   const json = (await res.json()) as {
     data?: {
       id: string
@@ -126,12 +124,7 @@ async function campaignRates(
       }),
     },
   )
-  if (!res.ok) {
-    throw (
-      avvist(res.status, "kampanjerapporter") ??
-      new Error(`Klaviyo values-report svarte ${res.status}`)
-    )
-  }
+  if (!res.ok) throw klaviyoFeil(res.status, "kampanjerapporter", "values-report")
   const json = (await res.json()) as {
     data?: {
       attributes?: {

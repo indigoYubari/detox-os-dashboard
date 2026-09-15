@@ -45,6 +45,24 @@ export type SourceErrorBody = {
   source: SourceName
   data_mode: "unavailable"
   generated_at: string
+  /** HTTP-status kilden svarte med, naar vi har en. Et tall, aldri innhold. */
+  upstream_status?: number
+}
+
+/**
+ * Kastes naar kilden svarte med en HTTP-status vi ikke kan lese noe ut av.
+ * Statusen tas med i feilsvaret som `upstream_status`, slik at "utilgjengelig"
+ * kan diagnostiseres fra dashboardet uten aa maatte ha kildens noekkel
+ * lokalt. Lagt til 2026-09-15 da Klaviyo-502-en viste seg aa IKKE vaere
+ * 401/403, og ingen kunne se hva den var.
+ */
+export class UpstreamStatusError extends Error {
+  readonly status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = "UpstreamStatusError"
+    this.status = status
+  }
 }
 
 /**
@@ -150,6 +168,7 @@ export function sourceErrorResponse(
       data_mode: "unavailable",
       generated_at,
     }
+    if (cause instanceof UpstreamStatusError) body.upstream_status = cause.status
     status = 502
   }
   return NextResponse.json(body, { status })

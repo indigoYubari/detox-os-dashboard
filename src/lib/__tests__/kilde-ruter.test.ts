@@ -90,6 +90,9 @@ describe("Klaviyo: /api/klaviyo/siste-kampanje", () => {
     expect(body.error).toBe("klaviyo_unavailable")
     expect(body.code).toBe("klaviyo_unavailable")
     expect(typeof body.hint).toBe("string")
+    // Statusen kilden ga tas med som tall, saa "utilgjengelig" kan
+    // diagnostiseres fra dashboardet - live 2026-09-15 var den ikke 401/403.
+    expect(body.upstream_status).toBe(500)
     expect(body).not.toHaveProperty("open_rate")
   })
 
