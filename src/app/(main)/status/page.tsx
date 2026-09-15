@@ -5,7 +5,7 @@ import Link from "next/link"
 import { ArrowUpRight } from "lucide-react"
 
 import { siteConfig } from "@/app/siteConfig"
-import { getProposals } from "@/lib/detox-api"
+import { ApiError, getProposals } from "@/lib/detox-api"
 import { supabase } from "@/lib/supabase"
 import { cx } from "@/lib/utils"
 
@@ -52,7 +52,10 @@ export default function StatusPage() {
   const [supabaseState, setSupabaseState] = useState<ConnectionState>("loading")
   const [clinical, setClinical] = useState<ClinicalCounts | null>(null)
   const [pendingProposals, setPendingProposals] = useState<number | null>(null)
-  const [proposalsFailed, setProposalsFailed] = useState(false)
+  // null = ingen feil. Ellers den ene linja eieren skal lese. Fram til
+  // 2026-09-15 sto det "Kunne ikke hente" uansett aarsak - ogsaa naar aarsaken
+  // var at ruta ikke finnes i ad-agenten (proposals ligger i en umerget gren).
+  const [proposalsHint, setProposalsHint] = useState<string | null>(null)
   const [proposalsLoading, setProposalsLoading] = useState(true)
 
   useEffect(() => {
@@ -78,10 +81,14 @@ export default function StatusPage() {
         const res = await getProposals({ status: "pending" })
         if (cancelled) return
         setPendingProposals(res.counts.total)
-        setProposalsFailed(false)
-      } catch {
+        setProposalsHint(null)
+      } catch (e) {
         if (cancelled) return
-        setProposalsFailed(true)
+        setProposalsHint(
+          e instanceof ApiError && e.hint
+            ? e.hint
+            : "Ad-agenten svarte ikke. Prøv igjen om litt.",
+        )
         setPendingProposals(null)
       } finally {
         if (!cancelled) setProposalsLoading(false)
@@ -148,7 +155,8 @@ export default function StatusPage() {
           title="Ventende forslag"
           value={pendingProposals}
           loading={proposalsLoading}
-          failed={proposalsFailed}
+          failed={proposalsHint !== null}
+          failedHint={proposalsHint ?? undefined}
           href={siteConfig.baseLinks.annonserForslag}
         />
       </Section>
@@ -212,12 +220,15 @@ function CountCard({
   value,
   loading,
   failed,
+  failedHint,
   href,
 }: {
   title: string
   value: number | null
   loading: boolean
   failed: boolean
+  /** En linje som sier HVORFOR. Uten den blir "Kunne ikke hente" staaende. */
+  failedHint?: string
   href: string
 }) {
   return (
@@ -229,8 +240,8 @@ function CountCard({
         {loading ? (
           <div className="h-9 w-12 animate-pulse rounded bg-white/5" />
         ) : failed ? (
-          <span className="text-sm text-[var(--os-text-muted)]">
-            Kunne ikke hente
+          <span className="text-xs leading-snug text-[var(--os-text-muted)]">
+            {failedHint ?? "Kunne ikke hente"}
           </span>
         ) : (
           <span

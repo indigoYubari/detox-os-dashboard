@@ -1,10 +1,40 @@
 "use client"
+import { useEffect, useState } from "react"
 import { cx, focusRing } from "@/lib/utils"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { siteConfig } from "@/app/siteConfig"
+import { supabase } from "@/lib/supabase"
 import MobileSidebar from "./MobileSidebar"
 import { navBottom, navSections, type NavItem } from "./navConfig"
+
+// Identitetskortet nederst. Fram til 2026-09-15 sto "Kim / Daglig leder"
+// hardkodet her - ogsaa naar Anniken eller Adrian var innlogget. Kim, Anniken
+// og Adrian deler EN konto (besluttet 15.09), saa sesjonen kan ikke skille
+// dem; da er den aerlige etiketten den felles ("Detox - eiere") med
+// sesjonens e-post under, ikke et navn sesjonen ikke kan bekrefte.
+// Ingen ny auth-kode: leses fra den samme browser-klienten resten av appen
+// bruker.
+const FELLES_ETIKETT = "Detox · eiere"
+
+function useSesjonEpost(): string | null {
+  const [epost, setEpost] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        if (!cancelled) setEpost(data.user?.email ?? null)
+      })
+      .catch(() => {
+        if (!cancelled) setEpost(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  return epost
+}
 
 // Nav-rad med ikon + tekst.
 function NavRow({ item, active }: { item: NavItem; active: boolean }) {
@@ -38,6 +68,7 @@ function Separator() {
 
 export function Sidebar() {
   const pathname = usePathname()
+  const epost = useSesjonEpost()
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`)
 
@@ -119,14 +150,17 @@ export function Sidebar() {
                 }}
                 aria-hidden="true"
               >
-                KA
+                DE
               </span>
               <div className="truncate">
                 <p className="truncate text-[11px] font-medium text-[var(--os-text-primary)]">
-                  Kim
+                  {FELLES_ETIKETT}
                 </p>
-                <p className="truncate text-[9px] text-[var(--os-text-muted)]">
-                  Daglig leder
+                <p
+                  className="truncate text-[9px] text-[var(--os-text-muted)]"
+                  title={epost ?? undefined}
+                >
+                  {epost ?? "Felles konto"}
                 </p>
               </div>
             </div>

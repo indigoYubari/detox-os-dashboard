@@ -2,6 +2,8 @@ import type {
   MetricsResponse,
   ChannelMetrics,
   DeltaValue,
+  InventoryResponse,
+  ShopifyDetailResponse,
 } from "@/lib/detox-api"
 
 // Rene funksjoner for /butikk. Skilt ut fra siden slik at reglene under kan
@@ -135,47 +137,116 @@ export function lesButikkTall(m: MetricsResponse): ButikkTall | null {
 }
 
 /**
- * Det den gamle mock-siden viste, som ikke finnes noe sted i dag. Listes
- * eksplisitt i UI-et heller enn aa forsvinne stille - da vet vi hva neste
- * slice faktisk maa laase opp, og ingen tror tallene bare ble borte.
+ * Produkt-, netto- og kundetall fra /api/metrics/shopify (ad-agenten,
+ * 2026-09-15). Returnerer null naar svaret ikke har noen ordrer i perioden -
+ * kalleren skal si "ingen data", ikke vise nuller.
  */
-export const IKKE_TILGJENGELIG: { navn: string; hvorfor: string }[] = [
-  {
-    navn: "Topprodukter med navn",
-    hvorfor:
-      "channel_metrics har radene, men /api/metrics aggregerer bort entity_name. Krever et per-produkt-endepunkt i ad-agenten.",
-  },
-  {
-    navn: "Antall ulike produkter solgt",
-    hvorfor:
-      "/api/metrics gir én product-rad per produkt per synkdag, så rows over en periode er produkt-dager, ikke produkter. Krever distinct-telling i ad-agenten.",
-  },
-  {
-    navn: "Omsetning uten kansellerte og refunderte ordrer",
-    hvorfor:
-      "Synken henter alle ordrestatuser (status: any) og lagrer financial_status bare i raw-feltet. Tallene her er brutto til ad-agenten filtrerer.",
-  },
-  {
-    navn: "Lagerstatus og low-stock",
-    hvorfor:
-      "getProductCatalog() finnes i ad-agenten, men kalles aldri og lagres ingen steder. Lager er en punkt-i-tid-tilstand, ikke en tidsserie.",
-  },
+export type ProduktTall = {
+  ulikeProdukter: number
+  topp: { navn: string; enheter: number; omsetning: number }[]
+  netto: {
+    omsetning: number
+    ordrer: number
+    /** Ordrer holdt utenfor netto: refunderte + annullerte. */
+    utelatt: number
+    /** Delvis refunderte ordrer - er MED i netto, men flagges. */
+    delvisRefundert: number
+  }
+  kunder: {
+    nye: { ordrer: number; andel: number | null }
+    returnerende: { ordrer: number; andel: number | null }
+    ukjent: { ordrer: number }
+  }
+}
+
+export function lesProduktTall(d: ShopifyDetailResponse): ProduktTall | null {
+  if (d.orders.gross.orders === 0 && d.products.distinct === 0) return null
+  const seg = (navn: "new" | "returning" | "unknown") =>
+    d.segments.find((s) => s.segment === navn) ?? {
+      orders: 0,
+      revenue: 0,
+      share: null,
+    }
+  const nye = seg("new")
+  const ret = seg("returning")
+  const ukj = seg("unknown")
+  return {
+    ulikeProdukter: d.products.distinct,
+    topp: d.products.top.map((p) => ({
+      navn: p.name ?? `Produkt ${p.productId}`,
+      enheter: p.units,
+      omsetning: p.revenue,
+    })),
+    netto: {
+      omsetning: d.orders.net.revenue,
+      ordrer: d.orders.net.orders,
+      utelatt: d.orders.excluded.refunded + d.orders.excluded.voided,
+      delvisRefundert: d.orders.partiallyRefunded,
+    },
+    kunder: {
+      nye: { ordrer: nye.orders, andel: nye.share },
+      returnerende: { ordrer: ret.orders, andel: ret.share },
+      ukjent: { ordrer: ukj.orders },
+    },
+  }
+}
+
+export type LagerTall = {
+  hentet: string
+  produkter: number
+  enheter: number
+  utsolgt: number
+  lavt: number
+  terskel: number
+  lavtListe: { navn: string; antall: number }[]
+}
+
+export function lesLagerTall(d: InventoryResponse): LagerTall {
+  return {
+    hentet: d.fetchedAt,
+    produkter: d.products,
+    enheter: d.totalUnits,
+    utsolgt: d.outOfStock,
+    lavt: d.lowStock,
+    terskel: d.threshold,
+    lavtListe: d.lowStockItems.map((p) => ({
+      navn: p.title,
+      antall: p.inventory,
+    })),
+  }
+}
+
+/**
+ * Det som fortsatt ikke har en kilde. `status` er den ene linja eieren ser;
+ * `detaljer` er for utvikleren, bak "Vis detaljer". Fram til 2026-09-15 sto
+ * detaljene som broedtekst paa aatte kort, og for Kim og Anniken leste det som
+ * en tom side. De fem andre kortene som sto her er naa koblet til.
+ */
+export const IKKE_KOBLET: {
+  navn: string
+  status: string
+  detaljer: string
+  krever: "beslutning" | "bygging"
+}[] = [
   {
     navn: "Refusjoner",
-    hvorfor: "Hentes ikke fra Shopify i det hele tatt i dag.",
+    status: "Ikke koblet til ennå.",
+    detaljer:
+      "Refusjonsbeløp hentes ikke fra Shopify i dag. Krever en ny synk i ad-agenten (refunds per ordre). Netto-tallet over utelater hele refunderte ordrer, men kjenner ikke beløpet på delvise refusjoner.",
+    krever: "bygging",
   },
   {
     navn: "Konvertering og besøkende",
-    hvorfor: "Ingen analytics-kilde er koblet til Detox OS.",
+    status: "Krever en ny datakilde. Venter på beslutning.",
+    detaljer:
+      "Ingen analytics-kilde (Shopify Analytics, GA4 eller lignende) er koblet til Detox OS. Ny datakilde krever Adrians ja.",
+    krever: "beslutning",
   },
   {
     navn: "Siste ordrer",
-    hvorfor:
-      "Ligger i raw-feltet per ordre, men eksponeres ikke. Krever også en personvernvurdering før kundenavn vises.",
-  },
-  {
-    navn: "Nye vs. returnerende kunder",
-    hvorfor:
-      "Ad-agenten regner det ut og lagrer det, men /api/metrics slår segmentene sammen til ett tall.",
+    status: "Venter på personvernvurdering.",
+    detaljer:
+      "Ordrene ligger i ad-agentens rådata, men kundenavn skal ikke vises før det er vurdert hvem som skal se dem og hvorfor. Beslutning hos Adrian.",
+    krever: "beslutning",
   },
 ]
