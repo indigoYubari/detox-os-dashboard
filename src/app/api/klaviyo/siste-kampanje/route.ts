@@ -68,12 +68,16 @@ type LatestCampaign = {
   sendt_dato: string | null
 }
 
-// Siste sendte e-postkampanje, sortert nyeste først.
+// Siste sendte e-postkampanje, sortert nyeste først. Uten page[size]: Klaviyo
+// svarte 400 «'page_size' is not a valid field for the resource 'campaign'»
+// (live 2026-09-15) - campaigns-endepunktet har kun cursor-paginering. Fram
+// til da ble det rapportert som «Klaviyo utilgjengelig» og antatt aa vaere
+// manglende scope.
 async function latestEmailCampaign(): Promise<LatestCampaign> {
   const url =
     "https://a.klaviyo.com/api/campaigns/" +
     "?filter=equals(messages.channel,'email')" +
-    "&sort=-created_at&page[size]=1"
+    "&sort=-created_at"
   const res = await fetch(url, { headers: HEADERS(), cache: "no-store" })
   if (!res.ok) throw await klaviyoFeil(res, "kampanjer", "campaigns")
   const json = (await res.json()) as {
