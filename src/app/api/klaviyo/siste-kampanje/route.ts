@@ -48,9 +48,12 @@ export const dynamic = "force-dynamic"
 
 type KampanjeTall = {
   kampanje_navn: string
-  open_rate: number // fraksjon 0..1
-  click_rate: number // fraksjon 0..1
+  /** Fraksjon 0..1. null = Klaviyo ga ingen rapportrad - ikke det samme som 0. */
+  open_rate: number | null
+  click_rate: number | null
   sendt_dato: string | null
+  /** Kort grunn naar ratene er null. */
+  rater_grunn: string | null
 }
 
 export type KampanjeData = KampanjeTall & LiveMeta
@@ -113,11 +116,20 @@ async function placedOrderMetricId(): Promise<string | null> {
   return hit?.id ?? null
 }
 
-// Open/click rate for en gitt kampanje via campaign-values-report.
+// Open/click rate for en gitt kampanje via campaign-values-report. Fram til
+// 2026-09-15 ble en manglende rapportrad til open_rate 0 - som leste som en
+// maaling («0 % open rate») for en kampanje sendt fem dager foer. Null +
+// grunn i stedet; 0 skal bety at Klaviyo faktisk sa 0.
+type Rater = {
+  open_rate: number | null
+  click_rate: number | null
+  grunn: string | null
+}
+
 async function campaignRates(
   campaignId: string,
   metricId: string,
-): Promise<{ open_rate: number; click_rate: number }> {
+): Promise<Rater> {
   const res = await fetch(
     "https://a.klaviyo.com/api/campaign-values-reports/",
     {
@@ -147,10 +159,19 @@ async function campaignRates(
       }
     }
   }
-  const stats = json.data?.attributes?.results?.[0]?.statistics
+  const results = json.data?.attributes?.results ?? []
+  const stats = results[0]?.statistics
+  if (!stats) {
+    return {
+      open_rate: null,
+      click_rate: null,
+      grunn: `Klaviyo har ingen rapportrad for kampanjen ennå (${results.length} rader i svaret).`,
+    }
+  }
   return {
-    open_rate: stats?.open_rate ?? 0,
-    click_rate: stats?.click_rate ?? 0,
+    open_rate: typeof stats.open_rate === "number" ? stats.open_rate : null,
+    click_rate: typeof stats.click_rate === "number" ? stats.click_rate : null,
+    grunn: null,
   }
 }
 
@@ -160,15 +181,20 @@ async function fetchKlaviyo(): Promise<KampanjeTall> {
   }
   const campaign = await latestEmailCampaign()
   const metricId = await placedOrderMetricId()
-  // Uten metrikk-ID kan vi ikke hente rater - vis kampanjenavn, rater 0.
-  const rates = metricId
+  // Uten metrikk-ID kan vi ikke hente rater - vis kampanjenavn, rater null.
+  const rates: Rater = metricId
     ? await campaignRates(campaign.id, metricId)
-    : { open_rate: 0, click_rate: 0 }
+    : {
+        open_rate: null,
+        click_rate: null,
+        grunn: "Fant ikke konverteringsmetrikken «Placed Order» i Klaviyo.",
+      }
   return {
     kampanje_navn: campaign.name,
     open_rate: rates.open_rate,
     click_rate: rates.click_rate,
     sendt_dato: campaign.sendt_dato,
+    rater_grunn: rates.grunn,
   }
 }
 
