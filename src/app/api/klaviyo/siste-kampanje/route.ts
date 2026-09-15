@@ -71,12 +71,12 @@ type LatestCampaign = {
   sendt_dato: string | null
 }
 
-// Siste sendte e-postkampanje, sortert nyeste først. Uten page[size]: Klaviyo
-// svarte 400 «'page_size' is not a valid field for the resource 'campaign'»
-// (live 2026-09-15) - campaigns-endepunktet har kun cursor-paginering. Fram
-// til da ble det rapportert som «Klaviyo utilgjengelig» og antatt aa vaere
-// manglende scope.
-async function latestEmailCampaign(): Promise<LatestCampaign> {
+// Nyeste e-postkampanjer (foerste side), nyeste foerst. Uten page[size]:
+// Klaviyo svarte 400 «'page_size' is not a valid field for the resource
+// 'campaign'» (live 2026-09-15) - campaigns-endepunktet har kun
+// cursor-paginering. Fram til da ble det rapportert som «Klaviyo
+// utilgjengelig» og antatt aa vaere manglende scope.
+async function recentEmailCampaigns(): Promise<LatestCampaign[]> {
   const url =
     "https://a.klaviyo.com/api/campaigns/" +
     "?filter=equals(messages.channel,'email')" +
@@ -89,13 +89,13 @@ async function latestEmailCampaign(): Promise<LatestCampaign> {
       attributes?: { name?: string; send_time?: string; created_at?: string }
     }[]
   }
-  const c = json.data?.[0]
-  if (!c) throw new Error("Ingen e-postkampanjer funnet i Klaviyo")
-  return {
+  const list = (json.data ?? []).map((c) => ({
     id: c.id,
     name: c.attributes?.name ?? "Uten navn",
     sendt_dato: c.attributes?.send_time ?? c.attributes?.created_at ?? null,
-  }
+  }))
+  if (list.length === 0) throw new Error("Ingen e-postkampanjer funnet i Klaviyo")
+  return list
 }
 
 // Finn metrikk-ID for "Placed Order" - kreves som conversion_metric_id.
@@ -116,20 +116,14 @@ async function placedOrderMetricId(): Promise<string | null> {
   return hit?.id ?? null
 }
 
-// Open/click rate for en gitt kampanje via campaign-values-report. Fram til
-// 2026-09-15 ble en manglende rapportrad til open_rate 0 - som leste som en
-// maaling («0 % open rate») for en kampanje sendt fem dager foer. Null +
-// grunn i stedet; 0 skal bety at Klaviyo faktisk sa 0.
-type Rater = {
-  open_rate: number | null
-  click_rate: number | null
-  grunn: string | null
-}
+// Open/click rate per kampanje via campaign-values-report, siste 12 mnd.
+// Rapporten grupperer per kampanje (groupings.campaign_id). Live 2026-09-15:
+// filter paa campaign_id ga 0 rader, og den nyeste kampanjen etter created_at
+// fantes ikke blant de 48 i rapporten (trolig ikke sendt ennaa). Derfor:
+// hent rapporten en gang, og la kalleren velge nyeste kampanje som HAR en rad.
+type Stats = { open_rate: number | null; click_rate: number | null }
 
-async function campaignRates(
-  campaignId: string,
-  metricId: string,
-): Promise<Rater> {
+async function campaignReport(metricId: string): Promise<Map<string, Stats>> {
   const res = await fetch(
     "https://a.klaviyo.com/api/campaign-values-reports/",
     {
@@ -143,9 +137,6 @@ async function campaignRates(
             statistics: ["open_rate", "click_rate"],
             timeframe: { key: "last_12_months" },
             conversion_metric_id: metricId,
-            // Ikke filter paa campaign_id: live 2026-09-15 ga det 0 rader for
-            // en kampanje sendt fem dager foer. Rapporten grupperer per
-            // kampanje (groupings.campaign_id); vi plukker raden selv.
           },
         },
       }),
@@ -162,44 +153,55 @@ async function campaignRates(
       }
     }
   }
-  const results = json.data?.attributes?.results ?? []
-  const stats = results.find(
-    (r) => r.groupings?.campaign_id === campaignId,
-  )?.statistics
-  if (!stats) {
-    return {
-      open_rate: null,
-      click_rate: null,
-      grunn: `Klaviyo har ingen rapportrad for kampanjen ennå (${results.length} kampanjer i rapporten).`,
-    }
+  const map = new Map<string, Stats>()
+  for (const r of json.data?.attributes?.results ?? []) {
+    const id = r.groupings?.campaign_id
+    if (!id || !r.statistics) continue
+    map.set(id, {
+      open_rate: typeof r.statistics.open_rate === "number" ? r.statistics.open_rate : null,
+      click_rate: typeof r.statistics.click_rate === "number" ? r.statistics.click_rate : null,
+    })
   }
-  return {
-    open_rate: typeof stats.open_rate === "number" ? stats.open_rate : null,
-    click_rate: typeof stats.click_rate === "number" ? stats.click_rate : null,
-    grunn: null,
-  }
+  return map
 }
 
 async function fetchKlaviyo(): Promise<KampanjeTall> {
   if (!KLAVIYO) {
     throw new NotConfiguredError("KLAVIYO_API_KEY mangler i miljøet")
   }
-  const campaign = await latestEmailCampaign()
+  const campaigns = await recentEmailCampaigns()
   const metricId = await placedOrderMetricId()
-  // Uten metrikk-ID kan vi ikke hente rater - vis kampanjenavn, rater null.
-  const rates: Rater = metricId
-    ? await campaignRates(campaign.id, metricId)
-    : {
-        open_rate: null,
-        click_rate: null,
-        grunn: "Fant ikke konverteringsmetrikken «Placed Order» i Klaviyo.",
-      }
+  if (!metricId) {
+    const c = campaigns[0]
+    return {
+      kampanje_navn: c.name,
+      open_rate: null,
+      click_rate: null,
+      sendt_dato: c.sendt_dato,
+      rater_grunn: "Fant ikke konverteringsmetrikken «Placed Order» i Klaviyo.",
+    }
+  }
+  const report = await campaignReport(metricId)
+  // Nyeste kampanje som faktisk har en rapportrad. En manglende rad ble fram
+  // til 2026-09-15 til open_rate 0 - som leste som en maaling.
+  const hit = campaigns.find((c) => report.has(c.id))
+  if (!hit) {
+    const c = campaigns[0]
+    return {
+      kampanje_navn: c.name,
+      open_rate: null,
+      click_rate: null,
+      sendt_dato: c.sendt_dato,
+      rater_grunn: `Ingen av de ${campaigns.length} nyeste kampanjene har en rapportrad ennå (${report.size} kampanjer i rapporten).`,
+    }
+  }
+  const stats = report.get(hit.id)!
   return {
-    kampanje_navn: campaign.name,
-    open_rate: rates.open_rate,
-    click_rate: rates.click_rate,
-    sendt_dato: campaign.sendt_dato,
-    rater_grunn: rates.grunn,
+    kampanje_navn: hit.name,
+    open_rate: stats.open_rate,
+    click_rate: stats.click_rate,
+    sendt_dato: hit.sendt_dato,
+    rater_grunn: null,
   }
 }
 
