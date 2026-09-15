@@ -47,6 +47,12 @@ export type SourceErrorBody = {
   generated_at: string
   /** HTTP-status kilden svarte med, naar vi har en. Et tall, aldri innhold. */
   upstream_status?: number
+  /**
+   * Kildens egen feilbeskrivelse (JSON:API errors[0]: code/title/detail),
+   * avkortet. Aldri headere, aldri URL med noekkel - kun det kilden selv
+   * sier er galt med forespoerselen.
+   */
+  upstream_error?: string
 }
 
 /**
@@ -58,11 +64,27 @@ export type SourceErrorBody = {
  */
 export class UpstreamStatusError extends Error {
   readonly status: number
-  constructor(message: string, status: number) {
+  readonly detail: string | null
+  constructor(message: string, status: number, detail: string | null = null) {
     super(message)
     this.name = "UpstreamStatusError"
     this.status = status
+    this.detail = detail
   }
+}
+
+/**
+ * Plukker code/title/detail ut av et JSON:API-feilsvar (Klaviyo-formen) og
+ * avkorter. Returnerer null hvis kroppen ikke er slik.
+ */
+export function upstreamErrorSummary(body: unknown, max = 240): string | null {
+  const e = (body as { errors?: { code?: unknown; title?: unknown; detail?: unknown }[] } | null)
+    ?.errors?.[0]
+  if (!e) return null
+  const parts = [e.code, e.title, e.detail]
+    .filter((v): v is string => typeof v === "string" && v.length > 0)
+  if (parts.length === 0) return null
+  return parts.join(" · ").slice(0, max)
 }
 
 /**
@@ -168,7 +190,10 @@ export function sourceErrorResponse(
       data_mode: "unavailable",
       generated_at,
     }
-    if (cause instanceof UpstreamStatusError) body.upstream_status = cause.status
+    if (cause instanceof UpstreamStatusError) {
+      body.upstream_status = cause.status
+      if (cause.detail) body.upstream_error = cause.detail
+    }
     status = 502
   }
   return NextResponse.json(body, { status })

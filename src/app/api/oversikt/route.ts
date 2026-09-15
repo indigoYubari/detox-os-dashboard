@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { authorize, requireDetoxPrincipal } from "@/lib/auth-server"
+import { upstreamErrorSummary } from "@/lib/source-state"
 
 // Server-side route. Tokenene leses fra env og forlater aldri serveren.
 // Mønster speiler /api/detox/[...path]: no-store, mykt feilhåndtert JSON-svar.
@@ -174,10 +175,16 @@ async function largestListSize(): Promise<{
       }
     }
     if (!res.ok) {
+      let detail: string | null = null
+      try {
+        detail = upstreamErrorSummary(await res.json())
+      } catch {
+        /* ikke JSON */
+      }
       return {
         size: null,
         name: null,
-        reason: `Klaviyo svarte ikke på listeoppslaget (status ${res.status}).`,
+        reason: `Klaviyo svarte ikke på listeoppslaget (status ${res.status}${detail ? `: ${detail}` : ""}).`,
       }
     }
     const json = (await res.json()) as {

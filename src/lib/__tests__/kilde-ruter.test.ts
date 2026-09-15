@@ -80,7 +80,13 @@ describe("Klaviyo: /api/klaviyo/siste-kampanje", () => {
   it("gir 502 og ingen tall naar Klaviyo svarer feil", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response("nope", { status: 500 })),
+      vi.fn(
+        async () =>
+          Response.json(
+            { errors: [{ code: "invalid", title: "Invalid input.", detail: "Invalid filter" }] },
+            { status: 500 },
+          ),
+      ),
     )
     const { res, body } = await kallRute(
       "../../app/api/klaviyo/siste-kampanje/route",
@@ -93,6 +99,7 @@ describe("Klaviyo: /api/klaviyo/siste-kampanje", () => {
     // Statusen kilden ga tas med som tall, saa "utilgjengelig" kan
     // diagnostiseres fra dashboardet - live 2026-09-15 var den ikke 401/403.
     expect(body.upstream_status).toBe(500)
+    expect(body.upstream_error).toBe("invalid · Invalid input. · Invalid filter")
     expect(body).not.toHaveProperty("open_rate")
   })
 
