@@ -80,7 +80,7 @@ describe("Klaviyo: /api/klaviyo/siste-kampanje", () => {
   it("gir 502 og ingen tall naar Klaviyo svarer feil", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response("nope", { status: 401 })),
+      vi.fn(async () => new Response("nope", { status: 500 })),
     )
     const { res, body } = await kallRute(
       "../../app/api/klaviyo/siste-kampanje/route",
@@ -88,7 +88,32 @@ describe("Klaviyo: /api/klaviyo/siste-kampanje", () => {
     )
     expect(res.status).toBe(502)
     expect(body.error).toBe("klaviyo_unavailable")
+    expect(body.code).toBe("klaviyo_unavailable")
+    expect(typeof body.hint).toBe("string")
     expect(body).not.toHaveProperty("open_rate")
+  })
+
+  it("navngir manglende scope naar Klaviyo avviser noekkelen (401/403)", async () => {
+    // Prod-tilstanden siden 2026-08-25: noekkelen er gyldig, men mangler
+    // campaigns:read. Fram til 2026-09-15 ble det "klaviyo_unavailable" og
+    // "Kunne ikke hente" - som om Klaviyo var nede.
+    for (const status of [401, 403]) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => new Response("forbidden", { status })),
+      )
+      const { res, body } = await kallRute(
+        "../../app/api/klaviyo/siste-kampanje/route",
+        { ...UTEN_NOKLER, KLAVIYO_API_KEY: "pk_test" },
+      )
+      expect(res.status).toBe(502)
+      expect(body.error).toBe("klaviyo_forbidden")
+      expect(body.code).toBe("klaviyo_forbidden")
+      expect(body.hint).toMatch(/mangler tilgang/)
+      // Hintet er for eieren: ingen URL, intet scope-navn i teknisk form.
+      expect(body.hint).not.toMatch(/https?:|campaigns:read|\//)
+      expect(body).not.toHaveProperty("open_rate")
+    }
   })
 
   it("lekker aldri den gamle mockkampanjen", async () => {

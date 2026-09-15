@@ -231,7 +231,81 @@ export type SearchTermsResponse = {
   counts: { wasted: number; strong: number }
 }
 
+export type ShopifyDetailResponse = {
+  range: { since: string; until: string }
+  lastSync: string | null
+  products: {
+    /** Antall ulike produkter solgt i perioden (ikke produkt-dager). */
+    distinct: number
+    top: {
+      productId: string
+      name: string | null
+      revenue: number
+      units: number
+      days: number
+    }[]
+  }
+  orders: {
+    gross: { revenue: number; orders: number }
+    /** Uten refunded/voided. partially_refunded er MED (beloepet er ukjent). */
+    net: { revenue: number; orders: number }
+    excluded: { refunded: number; voided: number }
+    partiallyRefunded: number
+    unknownStatus: number
+  }
+  segments: {
+    segment: "new" | "returning" | "unknown"
+    orders: number
+    revenue: number
+    share: number | null
+  }[]
+}
+
+export type InventoryResponse = {
+  fetchedAt: string
+  threshold: number
+  products: number
+  totalUnits: number
+  outOfStock: number
+  lowStock: number
+  lowStockItems: { id: string; title: string; inventory: number }[]
+}
+
 const BASE = "/api/detox"
+
+/**
+ * Feil fra en API-rute, med den navngitte koden og hintet ruta sendte. UI-et
+ * skal vise `hint` paa en linje - aldri "Kunne ikke hente" uten grunn.
+ * Rutene bak proxyen svarer alltid JSON med `code` + `hint` (route.ts), saa
+ * fravaer av begge betyr at noe helt annet svarte.
+ */
+export class ApiError extends Error {
+  readonly status: number
+  readonly code: string
+  readonly hint: string | null
+  constructor(message: string, status: number, code: string, hint: string | null) {
+    super(message)
+    this.name = "ApiError"
+    this.status = status
+    this.code = code
+    this.hint = hint
+  }
+}
+
+async function readJsonOrThrow<T>(res: Response, hva: string): Promise<T> {
+  if (res.ok) return (await res.json()) as T
+  let code = `http_${res.status}`
+  let hint: string | null = null
+  try {
+    const j = (await res.json()) as { code?: string; hint?: string; error?: string }
+    if (typeof j.code === "string") code = j.code
+    else if (typeof j.error === "string") code = j.error
+    if (typeof j.hint === "string") hint = j.hint
+  } catch {
+    /* ikke JSON */
+  }
+  throw new ApiError(`${hva} feilet: ${res.status}`, res.status, code, hint)
+}
 
 async function postJson(url: string, body: Record<string, unknown> = {}) {
   const res = await fetch(url, {
@@ -260,8 +334,7 @@ export async function getMetrics(
   if (since) params.set("since", since)
   if (until) params.set("until", until)
   const res = await fetch(`${BASE}/metrics?${params}`, { cache: "no-store" })
-  if (!res.ok) throw new Error(`Metrics feilet: ${res.status}`)
-  return res.json()
+  return readJsonOrThrow<MetricsResponse>(res, "Metrics")
 }
 
 export async function getRecommendations(
@@ -340,8 +413,27 @@ export async function getProposals(
   if (params.priority) qs.set("priority", params.priority)
   qs.set("limit", String(params.limit ?? 500))
   const res = await fetch(`${BASE}/proposals?${qs}`, { cache: "no-store" })
-  if (!res.ok) throw new Error(`Forslag feilet: ${res.status}`)
-  return res.json()
+  return readJsonOrThrow<ProposalsResponse>(res, "Forslag")
+}
+
+export async function getShopifyDetail(
+  since?: string,
+  until?: string,
+  limit = 10,
+): Promise<ShopifyDetailResponse> {
+  const params = new URLSearchParams()
+  if (since) params.set("since", since)
+  if (until) params.set("until", until)
+  params.set("limit", String(limit))
+  const res = await fetch(`${BASE}/metrics/shopify?${params}`, {
+    cache: "no-store",
+  })
+  return readJsonOrThrow<ShopifyDetailResponse>(res, "Shopify-detaljer")
+}
+
+export async function getInventory(): Promise<InventoryResponse> {
+  const res = await fetch(`${BASE}/metrics/inventory`, { cache: "no-store" })
+  return readJsonOrThrow<InventoryResponse>(res, "Lager")
 }
 
 export async function getProposalExecutionMode(): Promise<ProposalExecutionModeResponse> {

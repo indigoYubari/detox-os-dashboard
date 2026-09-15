@@ -100,36 +100,9 @@ async function forward(
     body = JSON.stringify(parsed)
   }
 
+  let res: Response
   try {
-    const res = await fetch(url, { method, headers, body, cache: 'no-store' })
-    const data = await res.json()
-
-    if (decision) {
-      const outcome = res.ok
-        ? `proposal.${decision.action}d`
-        : 'proposal.decision_failed'
-      await recordActivityEvent({
-        actorId: actor.id,
-        actorType: actor.actorType,
-        source: actor.actorType === 'service' ? actor.principal : undefined,
-        accessToken: actor.accessToken,
-        eventType: outcome,
-        objectType: 'action_proposal',
-        objectId: decision.id,
-        correlationId,
-        detail: {
-          action: decision.action,
-          backend_status: res.status,
-          decided_by: buildDecidedBy(actor),
-          principal: actor.principal,
-          configured_for: actor.configuredFor,
-        },
-      })
-    }
-
-    const response = NextResponse.json(data, { status: res.status })
-    response.headers.set('X-Correlation-Id', correlationId)
-    return response
+    res = await fetch(url, { method, headers, body, cache: 'no-store' })
   } catch {
     if (decision) {
       await recordActivityEvent({
@@ -150,10 +123,71 @@ async function forward(
       })
     }
     return NextResponse.json(
-      { error: 'Backend utilgjengelig', code: 'backend_unavailable' },
+      {
+        error: 'Backend utilgjengelig',
+        code: 'backend_unavailable',
+        hint: 'Ad-agenten svarte ikke. Prøv igjen om litt.',
+      },
       { status: 502 },
     )
   }
+
+  // Ad-agenten svarer JSON paa alle kjente ruter. Et svar som IKKE er JSON er
+  // Express sin egen 404-side ("Cannot GET /api/proposals") eller en proxy-
+  // feil - fram til 2026-09-15 endte begge i catch-blokka under og ble
+  // rapportert som "backend_unavailable", som om ad-agenten var nede.
+  // /status sto dermed med "Kunne ikke hente" for en rute som ikke finnes
+  // (proposals ligger i en umerget gren). Navngi det i stedet.
+  const text = await res.text()
+  let data: unknown
+  try {
+    data = JSON.parse(text)
+  } catch {
+    const missing = res.status === 404
+    const response = NextResponse.json(
+      {
+        error: missing
+          ? 'Ad-agenten har ikke dette endepunktet'
+          : 'Ad-agenten ga et uventet svar',
+        code: missing ? 'backend_route_missing' : 'backend_bad_response',
+        hint: missing
+          ? 'Denne funksjonen er ikke koblet til i ad-agenten ennå.'
+          : 'Ad-agenten svarte, men ikke med data. Prøv igjen om litt.',
+        backend_status: res.status,
+        path,
+      },
+      { status: 502 },
+    )
+    response.headers.set('X-Correlation-Id', correlationId)
+    return response
+  }
+
+  if (decision) {
+    const outcome = res.ok
+      ? `proposal.${decision.action}d`
+      : 'proposal.decision_failed'
+    await recordActivityEvent({
+      actorId: actor.id,
+      actorType: actor.actorType,
+      source: actor.actorType === 'service' ? actor.principal : undefined,
+      accessToken: actor.accessToken,
+      eventType: outcome,
+      objectType: 'action_proposal',
+      objectId: decision.id,
+      correlationId,
+      detail: {
+        action: decision.action,
+        backend_status: res.status,
+        decided_by: buildDecidedBy(actor),
+        principal: actor.principal,
+        configured_for: actor.configuredFor,
+      },
+    })
+  }
+
+  const response = NextResponse.json(data, { status: res.status })
+  response.headers.set('X-Correlation-Id', correlationId)
+  return response
 }
 
 export async function GET(

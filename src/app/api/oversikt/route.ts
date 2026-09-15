@@ -23,6 +23,8 @@ type KlaviyoData = {
   emailRevenue7d: number
   listSize: number | null
   listName: string | null
+  /** Kort, eier-lesbar grunn naar listSize er null. */
+  listSizeReason: string | null
 }
 
 // Midnatt i dag i Europe/Oslo som ISO med korrekt offset (håndterer sommertid).
@@ -150,34 +152,48 @@ async function valuesReportSum(
 }
 
 // Best-effort listestørrelse. profile_count avvises av enkelte kontoer/revisjoner,
-// da returneres null og siden viser "ikke tilgjengelig".
+// da returneres null og siden viser "ikke tilgjengelig" - MED grunn. Fram til
+// 2026-09-15 forsvant grunnen her (401/403 = noekkelen mangler lists:read,
+// kjent siden 2026-08-25), og kortet sto uforklart tomt for eierne.
 async function largestListSize(): Promise<{
   size: number | null
   name: string | null
+  reason: string | null
 }> {
   try {
     const res = await fetch(
       "https://a.klaviyo.com/api/lists/?additional-fields[list]=profile_count",
       { headers: KLAVIYO_HEADERS(), cache: "no-store" },
     )
-    if (!res.ok) return { size: null, name: null }
+    if (res.status === 401 || res.status === 403) {
+      return {
+        size: null,
+        name: null,
+        reason:
+          "Klaviyo-nøkkelen mangler tilgang til lister. Kontoeieren må utvide nøkkelens rettigheter.",
+      }
+    }
+    if (!res.ok) {
+      return { size: null, name: null, reason: "Klaviyo svarte ikke på listeoppslaget." }
+    }
     const json = (await res.json()) as {
       data?: { attributes: { name: string; profile_count?: number } }[]
     }
     const lists = json.data ?? []
-    let best: { size: number | null; name: string | null } = {
+    let best: { size: number | null; name: string | null; reason: string | null } = {
       size: null,
       name: null,
+      reason: "Klaviyo oppgir ikke antall profiler for listene.",
     }
     for (const l of lists) {
       const c = l.attributes?.profile_count
       if (typeof c === "number" && (best.size === null || c > best.size)) {
-        best = { size: c, name: l.attributes?.name ?? null }
+        best = { size: c, name: l.attributes?.name ?? null, reason: null }
       }
     }
     return best
   } catch {
-    return { size: null, name: null }
+    return { size: null, name: null, reason: "Klaviyo svarte ikke på listeoppslaget." }
   }
 }
 
@@ -196,6 +212,7 @@ async function fetchKlaviyo(): Promise<KlaviyoData> {
     emailRevenue7d: campaign + flow,
     listSize: list.size,
     listName: list.name,
+    listSizeReason: list.reason,
   }
 }
 

@@ -8,10 +8,19 @@ import { NextResponse } from "next/server"
 // omsetning og innboks som om det var dagens virkelighet. Detox OS-byggeloepet
 // SS4: "Mock eller seed-data skal aldri presenteres som live virkelighet."
 //
-// Kontrakten skiller tre tilstander som tidligere ble slaatt sammen til en:
-//   live         - kilden svarte, tallene er ekte (ogsaa naar de er null)
-//   unavailable  - kilden feilet, vi har ingen tall (502)
+// Kontrakten skiller fire tilstander som tidligere ble slaatt sammen til en:
+//   live           - kilden svarte, tallene er ekte (ogsaa naar de er null)
+//   forbidden      - kilden avviste noekkelen vaar (502): noekkelen finnes, men
+//                    mangler rettigheten. Retry hjelper ikke; kontoeieren maa
+//                    utvide scopet. Skilles ut 2026-09-15 fordi /status og
+//                    /i-dag sto med "Kunne ikke hente" i to uker for en feil
+//                    som var kjent og hadde en eier.
+//   unavailable    - kilden feilet, vi har ingen tall (502)
 //   not configured - vi mangler nokler, kilden ble aldri spurt (503)
+//
+// Alle feilsvar baerer `code` + `hint`: en kort, eier-lesbar setning UI-et kan
+// vise paa en linje. Intern arkitektur (URL-er, scope-navn i teknisk form,
+// feltnavn) hoerer hjemme i loggen, ikke i hint.
 
 export type SourceName = "shopify" | "gmail" | "klaviyo"
 
@@ -21,9 +30,18 @@ export type LiveMeta = {
   generated_at: string
 }
 
+export type SourceErrorCode =
+  | `${SourceName}_not_configured`
+  | `${SourceName}_forbidden`
+  | `${SourceName}_unavailable`
+
 export type SourceErrorBody = {
-  error: `${SourceName}_not_configured` | `${SourceName}_unavailable`
+  error: SourceErrorCode
+  /** Samme som `error`. Finnes slik at alle feilsvar i appen har `code`. */
+  code: SourceErrorCode
   message: string
+  /** Kort, eier-lesbar forklaring. Alltid satt. */
+  hint: string
   source: SourceName
   data_mode: "unavailable"
   generated_at: string
@@ -40,23 +58,45 @@ export class NotConfiguredError extends Error {
   }
 }
 
+/**
+ * Kastes naar kilden svarer 401/403: noekkelen er gyldig men mangler
+ * rettigheten. `hint` er det eieren skal lese.
+ */
+export class ForbiddenError extends Error {
+  readonly hint: string
+  constructor(message: string, hint: string) {
+    super(message)
+    this.name = "ForbiddenError"
+    this.hint = hint
+  }
+}
+
 /** Metadata som merker et vellykket svar som ekte. */
 export function liveMeta(source: SourceName): LiveMeta {
   return { source, data_mode: "live", generated_at: new Date().toISOString() }
 }
 
-const MELDING: Record<SourceName, { mangler: string; nede: string }> = {
+const MELDING: Record<
+  SourceName,
+  { mangler: string; nede: string; hintMangler: string; hintNede: string }
+> = {
   shopify: {
     mangler: "Shopify-tilkoblingen er ikke konfigurert",
     nede: "Shopify er utilgjengelig akkurat nå",
+    hintMangler: "Shopify er ikke koblet til ennå.",
+    hintNede: "Shopify svarte ikke. Prøv igjen om litt.",
   },
   gmail: {
     mangler: "Gmail-tilkoblingen er ikke konfigurert",
     nede: "Gmail er utilgjengelig akkurat nå",
+    hintMangler: "Gmail er ikke koblet til ennå.",
+    hintNede: "Gmail svarte ikke. Prøv igjen om litt.",
   },
   klaviyo: {
     mangler: "Klaviyo-tilkoblingen er ikke konfigurert",
     nede: "Klaviyo er utilgjengelig akkurat nå",
+    hintMangler: "Klaviyo er ikke koblet til ennå.",
+    hintNede: "Klaviyo svarte ikke. Prøv igjen om litt.",
   },
 }
 
@@ -65,19 +105,52 @@ const MELDING: Record<SourceName, { mangler: string; nede: string }> = {
  * klienten - den kan inneholde URL-er, tokens eller interne detaljer.
  *
  * 503 = ikke konfigurert (retry hjelper ikke, noen maa sette en noekkel).
- * 502 = kilden er nede (kan gaa over av seg selv).
+ * 502 = kilden er nede ELLER avviste oss (forbidden). Begge er "ikke vaar
+ *       server", men forbidden har en eier og et hint.
  */
 export function sourceErrorResponse(
   source: SourceName,
   cause: unknown,
 ): NextResponse<SourceErrorBody> {
-  const mangler = cause instanceof NotConfiguredError
-  const body: SourceErrorBody = {
-    error: mangler ? `${source}_not_configured` : `${source}_unavailable`,
-    message: mangler ? MELDING[source].mangler : MELDING[source].nede,
-    source,
-    data_mode: "unavailable",
-    generated_at: new Date().toISOString(),
+  const generated_at = new Date().toISOString()
+  let body: SourceErrorBody
+  let status: number
+  if (cause instanceof NotConfiguredError) {
+    const code = `${source}_not_configured` as const
+    body = {
+      error: code,
+      code,
+      message: MELDING[source].mangler,
+      hint: MELDING[source].hintMangler,
+      source,
+      data_mode: "unavailable",
+      generated_at,
+    }
+    status = 503
+  } else if (cause instanceof ForbiddenError) {
+    const code = `${source}_forbidden` as const
+    body = {
+      error: code,
+      code,
+      message: `${MELDING[source].nede.split(" er ")[0]} avviste tilgangen`,
+      hint: cause.hint,
+      source,
+      data_mode: "unavailable",
+      generated_at,
+    }
+    status = 502
+  } else {
+    const code = `${source}_unavailable` as const
+    body = {
+      error: code,
+      code,
+      message: MELDING[source].nede,
+      hint: MELDING[source].hintNede,
+      source,
+      data_mode: "unavailable",
+      generated_at,
+    }
+    status = 502
   }
-  return NextResponse.json(body, { status: mangler ? 503 : 502 })
+  return NextResponse.json(body, { status })
 }

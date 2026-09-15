@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { authorize, requireDetoxUser } from "@/lib/auth-server"
 import {
+  ForbiddenError,
   liveMeta,
   NotConfiguredError,
   sourceErrorResponse,
@@ -18,6 +19,18 @@ const KLAVIYO = process.env.KLAVIYO_API_KEY
 // 2024-10-15 matcher den verifiserte /api/oversikt-ruten. Reporting-API-et
 // (campaign-values-reports) krever denne revisjonen, ikke 2023-10-15.
 const KLAVIYO_REVISION = "2024-10-15"
+
+// Klaviyo svarer 401/403 naar noekkelen mangler scopet et endepunkt krever.
+// Noekkelen i prod er gyldig (metrics og values-reports virker), men mangler
+// campaigns:read - kjent siden 2026-08-25, eid av Klaviyo-kontoens eier.
+// Fram til 2026-09-15 ble det til "Kunne ikke hente" uten forklaring.
+function avvist(status: number, scope: string): ForbiddenError | null {
+  if (status !== 401 && status !== 403) return null
+  return new ForbiddenError(
+    `Klaviyo svarte ${status} - noekkelen mangler ${scope}`,
+    `Klaviyo-nøkkelen mangler tilgang til ${scope}. Kontoeieren må utvide nøkkelens rettigheter.`,
+  )
+}
 
 export const dynamic = "force-dynamic"
 
@@ -50,7 +63,12 @@ async function latestEmailCampaign(): Promise<LatestCampaign> {
     "?filter=equals(messages.channel,'email')" +
     "&sort=-created_at&page[size]=1"
   const res = await fetch(url, { headers: HEADERS(), cache: "no-store" })
-  if (!res.ok) throw new Error(`Klaviyo campaigns svarte ${res.status}`)
+  if (!res.ok) {
+    throw (
+      avvist(res.status, "kampanjer") ??
+      new Error(`Klaviyo campaigns svarte ${res.status}`)
+    )
+  }
   const json = (await res.json()) as {
     data?: {
       id: string
@@ -108,7 +126,12 @@ async function campaignRates(
       }),
     },
   )
-  if (!res.ok) throw new Error(`Klaviyo values-report svarte ${res.status}`)
+  if (!res.ok) {
+    throw (
+      avvist(res.status, "kampanjerapporter") ??
+      new Error(`Klaviyo values-report svarte ${res.status}`)
+    )
+  }
   const json = (await res.json()) as {
     data?: {
       attributes?: {

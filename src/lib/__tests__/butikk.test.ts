@@ -2,12 +2,18 @@ import { describe, expect, it } from "vitest"
 
 import {
   butikkVindu,
-  IKKE_TILGJENGELIG,
+  IKKE_KOBLET,
   lesButikkTall,
+  lesLagerTall,
+  lesProduktTall,
   STALE_ETTER_TIMER,
   vurderFriskhet,
 } from "../butikk"
-import type { MetricsResponse } from "../detox-api"
+import type {
+  InventoryResponse,
+  MetricsResponse,
+  ShopifyDetailResponse,
+} from "../detox-api"
 
 // Formen under er kopiert fra et ekte svar fra /api/detox/metrics
 // (2026-08-25, vindu 2026-07-26..2026-08-25), ikke oppdiktet.
@@ -197,19 +203,119 @@ describe("butikkVindu", () => {
   })
 })
 
-describe("gjeldslisten", () => {
-  it("navngir hvert punkt med en begrunnelse", () => {
-    expect(IKKE_TILGJENGELIG.length).toBeGreaterThan(0)
-    for (const rad of IKKE_TILGJENGELIG) {
-      expect(rad.navn.length).toBeGreaterThan(0)
-      expect(rad.hvorfor.length).toBeGreaterThan(20)
+// Formen er den /api/metrics/shopify i ad-agenten svarer med (shopify-summary.js).
+function detalj(overstyr: Partial<ShopifyDetailResponse> = {}): ShopifyDetailResponse {
+  return {
+    range: { since: "2026-08-16", until: "2026-09-14" },
+    lastSync: "2026-09-15T04:01:03Z",
+    products: {
+      distinct: 3,
+      top: [
+        { productId: "1", name: "Zeolitt", revenue: 4000, units: 40, days: 20 },
+        { productId: "2", name: null, revenue: 100, units: 1, days: 1 },
+      ],
+    },
+    orders: {
+      gross: { revenue: 5000, orders: 10 },
+      net: { revenue: 4500, orders: 8 },
+      excluded: { refunded: 1, voided: 1 },
+      partiallyRefunded: 1,
+      unknownStatus: 0,
+    },
+    segments: [
+      { segment: "new", orders: 6, revenue: 3000, share: 0.6 },
+      { segment: "returning", orders: 4, revenue: 2000, share: 0.4 },
+      { segment: "unknown", orders: 0, revenue: 0, share: 0 },
+    ],
+    ...overstyr,
+  }
+}
+
+describe("lesProduktTall", () => {
+  it("leser ulike produkter, topp, netto og segmenter", () => {
+    const t = lesProduktTall(detalj())!
+    expect(t.ulikeProdukter).toBe(3)
+    expect(t.topp[0]).toEqual({ navn: "Zeolitt", enheter: 40, omsetning: 4000 })
+    // Produkt uten navn faar en lesbar etikett, ikke "null".
+    expect(t.topp[1].navn).toBe("Produkt 2")
+    expect(t.netto).toEqual({ omsetning: 4500, ordrer: 8, utelatt: 2, delvisRefundert: 1 })
+    expect(t.kunder.nye).toEqual({ ordrer: 6, andel: 0.6 })
+    expect(t.kunder.returnerende.andel).toBe(0.4)
+  })
+
+  it("gir null - ikke nuller - naar perioden er tom", () => {
+    const tom = detalj({
+      products: { distinct: 0, top: [] },
+      orders: {
+        gross: { revenue: 0, orders: 0 },
+        net: { revenue: 0, orders: 0 },
+        excluded: { refunded: 0, voided: 0 },
+        partiallyRefunded: 0,
+        unknownStatus: 0,
+      },
+    })
+    expect(lesProduktTall(tom)).toBeNull()
+  })
+
+  it("taaler at et segment mangler i svaret", () => {
+    const t = lesProduktTall(detalj({ segments: [] }))!
+    expect(t.kunder.nye).toEqual({ ordrer: 0, andel: null })
+  })
+})
+
+describe("lesLagerTall", () => {
+  it("oversetter lagersvaret en-til-en", () => {
+    const d: InventoryResponse = {
+      fetchedAt: "2026-09-15T12:00:00Z",
+      threshold: 5,
+      products: 120,
+      totalUnits: 3400,
+      outOfStock: 2,
+      lowStock: 7,
+      lowStockItems: [{ id: "a", title: "A", inventory: 0 }],
+    }
+    expect(lesLagerTall(d)).toEqual({
+      hentet: "2026-09-15T12:00:00Z",
+      produkter: 120,
+      enheter: 3400,
+      utsolgt: 2,
+      lavt: 7,
+      terskel: 5,
+      lavtListe: [{ navn: "A", antall: 0 }],
+    })
+  })
+})
+
+describe("ikke-koblet-listen", () => {
+  it("er kort, og eierens linje inneholder ingen intern arkitektur", () => {
+    expect(IKKE_KOBLET.length).toBe(3)
+    // Det eieren ser (navn + status) skal aldri naevne tabeller, endepunkter,
+    // feltnavn eller funksjoner. Detaljene ligger bak "Vis detaljer".
+    const internt = /channel_metrics|\/api\/|entity_name|raw-feltet|\(\)|financial_status|getProductCatalog/
+    for (const rad of IKKE_KOBLET) {
+      expect(rad.navn).not.toMatch(internt)
+      expect(rad.status).not.toMatch(internt)
+      expect(rad.status.length).toBeLessThan(80)
+      expect(rad.detaljer.length).toBeGreaterThan(20)
     }
   })
 
-  it("forklarer at produkt-antall og netto-omsetning mangler", () => {
-    const navn = IKKE_TILGJENGELIG.map((r) => r.navn)
-    expect(navn).toContain("Antall ulike produkter solgt")
-    expect(navn).toContain("Omsetning uten kansellerte og refunderte ordrer")
+  it("holder de to som krever Adrians beslutning utenfor bygging", () => {
+    const beslutning = IKKE_KOBLET.filter((r) => r.krever === "beslutning").map((r) => r.navn)
+    expect(beslutning).toEqual(["Konvertering og besøkende", "Siste ordrer"])
+  })
+
+  it("lister ikke lenger det som er koblet til", () => {
+    const navn = IKKE_KOBLET.map((r) => r.navn)
+    for (const koblet of [
+      "Topprodukter med navn",
+      "Antall ulike produkter solgt",
+      "Omsetning uten kansellerte og refunderte ordrer",
+      "Lagerstatus og low-stock",
+      "Nye vs. returnerende kunder",
+    ]) {
+      expect(navn).not.toContain(koblet)
+    }
   })
 })
 
@@ -232,8 +338,17 @@ describe("kildekode-vakt", () => {
     ]) {
       expect(kode).not.toContain(navn)
     }
-    // Siden skal hente data, ikke baere dem.
+    // Siden skal hente data, ikke baere dem - fra alle tre kildene.
     expect(kode).toContain("getMetrics")
+    expect(kode).toContain("getShopifyDetail")
+    expect(kode).toContain("getInventory")
+    // Eier-flaten skal ikke forklare seg med intern arkitektur (Orion 15.09).
+    // Tooltips og feilhint er tekst eieren leser; ingen av dem faar naevne
+    // tabeller eller endepunkter.
+    expect(kode).not.toMatch(/channel_metrics|entity_name|\/api\/metrics/)
+    // En kort-stil: den etablerte (KpiCard/OsCard), ikke Tremor-graa kort.
+    expect(kode).toContain("OsCard")
+    expect(kode).not.toMatch(/border-gray-200 bg-white/)
     // Vinduet skal komme fra butikkVindu (til og med i gaar), ikke regnes
     // lokalt med subDays - det ga 31 dager med en tom siste dag.
     expect(kode).toContain("butikkVindu")

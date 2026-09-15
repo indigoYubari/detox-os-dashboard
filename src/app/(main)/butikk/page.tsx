@@ -3,115 +3,75 @@
 import React from "react"
 import { format } from "date-fns"
 
-import { StatTooltip } from "@/components/ui/StatTooltip"
-import { deltaClass, kr, num, pctLabel } from "@/lib/ad-format"
-import { getMetrics, type DeltaValue } from "@/lib/detox-api"
+import { KpiCard } from "@/components/ui/KpiCard"
+import { OsCard } from "@/components/ui/OsCard"
+import { deltaLabel, kr, num } from "@/components/i-dag/format"
+import {
+  ApiError,
+  getInventory,
+  getMetrics,
+  getShopifyDetail,
+  type DeltaValue,
+} from "@/lib/detox-api"
 import {
   butikkVindu,
-  IKKE_TILGJENGELIG,
+  IKKE_KOBLET,
   lesButikkTall,
+  lesLagerTall,
+  lesProduktTall,
   vurderFriskhet,
   type ButikkTall,
   type Datafriskhet,
+  type LagerTall,
+  type ProduktTall,
 } from "@/lib/butikk"
+import { cx } from "@/lib/utils"
 
-// Siden viste fram til 2026-08-25 fire hardkodede konstanter - 186 ordrer og
-// kr 312 400 MTD, topprodukter med oppdiktede SKU-er, lagertall og en
-// ordreliste datert 7. juni - uten en eneste fetch. Den leser naa Shopify via
-// den samme autentiserte ad-agent-proxyen som /annonser allerede bruker.
-//
-// Det som ikke finnes i noen ekte kilde er fjernet, ikke erstattet med nye
-// tall. Se IKKE_TILGJENGELIG nederst paa siden.
+// Siden viste fram til 2026-08-25 fire hardkodede konstanter uten en eneste
+// fetch. Fra 2026-08-25 leste den ekte tall via ad-agent-proxyen, men sto med
+// aatte "ikke tilgjengelig"-kort skrevet paa utviklerspraak - for eierne det
+// samme som en tom side (Orion 2026-09-15). Naa: tre kilder (metrics,
+// metrics/shopify, metrics/inventory), en kort-stil (KpiCard/OsCard), og det
+// som fortsatt mangler staar paa en linje hver, med detaljene bak "Vis
+// detaljer". Ingen mock, ingen fallback: mangler kilden, sier kortet det.
 
 const WINDOW_DAYS = 30
 
-type Tilstand =
+type Kilde<T> =
   | { status: "laster" }
-  | { status: "feil"; melding: string }
-  | { status: "tom"; friskhet: Datafriskhet }
-  | { status: "ok"; tall: ButikkTall; friskhet: Datafriskhet }
+  | { status: "feil"; hint: string }
+  | { status: "tom" }
+  | { status: "ok"; data: T }
 
-function Delta({ verdi }: { verdi: DeltaValue | null }) {
-  if (!verdi) return null
-  return (
-    <p className={`mt-1 text-xs ${deltaClass(verdi.dir)}`}>
-      {pctLabel(verdi.pct, verdi.dir)} mot forrige {WINDOW_DAYS} dager
-    </p>
-  )
+const LASTER = { status: "laster" } as const
+
+function hintFra(e: unknown, fallback: string): string {
+  if (e instanceof ApiError && e.hint) return e.hint
+  return fallback
 }
 
-function Kpi({
-  navn,
-  forklaring,
-  verdi,
-  delta,
-  fremhevet = false,
-}: {
-  navn: string
-  forklaring: string
-  verdi: string
-  delta?: DeltaValue | null
-  fremhevet?: boolean
-}) {
-  return (
-    <div
-      className={`rounded-lg border p-5 ${
-        fremhevet
-          ? "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950"
-          : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
-      }`}
-    >
-      <p className="text-xs text-gray-500 dark:text-gray-400">
-        <StatTooltip explanation={forklaring}>{navn}</StatTooltip>
-      </p>
-      <p
-        className={`mt-2 text-2xl font-semibold ${
-          fremhevet
-            ? "text-green-700 dark:text-green-300"
-            : "text-gray-900 dark:text-gray-50"
-        }`}
-      >
-        {verdi}
-      </p>
-      {delta !== undefined && <Delta verdi={delta} />}
-    </div>
-  )
+// KpiCard utleder retning fra om teksten starter med "-"; deltaLabel starter
+// med en pil, saa retningen maa sendes eksplisitt - ellers blir et fall groent.
+function deltaProps(
+  d: DeltaValue | null | undefined,
+): { delta?: string; trend?: "up" | "down" } {
+  if (!d || d.pct == null) return {}
+  return {
+    delta: `${deltaLabel(d)} mot forrige ${WINDOW_DAYS} d`,
+    trend: d.dir === "down" ? "down" : "up",
+  }
 }
 
-function Kildelinje({ friskhet }: { friskhet: Datafriskhet }) {
-  const stale = friskhet.data_mode === "stale"
-  return (
-    <div
-      className={`mt-4 rounded-xl border p-3 text-sm ${
-        stale
-          ? "border-yellow-200 bg-yellow-50 text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300"
-          : "border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400"
-      }`}
-    >
-      <span className="font-medium">
-        Kilde: Shopify via ad-agent · {friskhet.data_mode}
-      </span>
-      {friskhet.sist_synket === null ? (
-        <span> · ingen synk registrert</span>
-      ) : (
-        <span>
-          {" "}
-          · sist synket {format(new Date(friskhet.sist_synket), "d. MMM HH:mm")}
-          {friskhet.timer_siden !== null && ` (${friskhet.timer_siden}t siden)`}
-        </span>
-      )}
-      {stale && (
-        <p className="mt-1 text-xs">
-          Synken har ikke kjørt som normalt. Tallene under er ekte, men kan være
-          utdaterte.
-        </p>
-      )}
-    </div>
-  )
+function andel(a: number | null): string {
+  return a == null ? "–" : `${Math.round(a * 100)} %`
 }
 
 export default function ButikkPage() {
-  const [tilstand, setTilstand] = React.useState<Tilstand>({ status: "laster" })
+  const [hoved, setHoved] = React.useState<
+    Kilde<{ tall: ButikkTall; friskhet: Datafriskhet }>
+  >(LASTER)
+  const [detalj, setDetalj] = React.useState<Kilde<ProduktTall>>(LASTER)
+  const [lager, setLager] = React.useState<Kilde<LagerTall>>(LASTER)
 
   React.useEffect(() => {
     let cancelled = false
@@ -124,122 +84,393 @@ export default function ButikkPage() {
         const friskhet = vurderFriskhet(m.lastSync, new Date())
         const tall = lesButikkTall(m)
         // Ingen Shopify-kanal i svaret er en aerlig tomtilstand, ikke nuller.
-        setTilstand(
-          tall === null
-            ? { status: "tom", friskhet }
-            : { status: "ok", tall, friskhet },
-        )
+        setHoved(tall === null ? { status: "tom" } : { status: "ok", data: { tall, friskhet } })
       })
       .catch((e: unknown) => {
-        if (!cancelled) {
-          setTilstand({
-            status: "feil",
-            melding: e instanceof Error ? e.message : "Ukjent feil",
-          })
-        }
+        if (!cancelled)
+          setHoved({ status: "feil", hint: hintFra(e, "Shopify-tallene kunne ikke leses akkurat nå.") })
       })
+
+    getShopifyDetail(since, until, 10)
+      .then((d) => {
+        if (cancelled) return
+        const tall = lesProduktTall(d)
+        setDetalj(tall === null ? { status: "tom" } : { status: "ok", data: tall })
+      })
+      .catch((e: unknown) => {
+        if (!cancelled)
+          setDetalj({ status: "feil", hint: hintFra(e, "Produkt- og kundetall kunne ikke leses akkurat nå.") })
+      })
+
+    getInventory()
+      .then((d) => {
+        if (!cancelled) setLager({ status: "ok", data: lesLagerTall(d) })
+      })
+      .catch((e: unknown) => {
+        if (!cancelled)
+          setLager({ status: "feil", hint: hintFra(e, "Lagerstatus kunne ikke leses fra Shopify akkurat nå.") })
+      })
+
     return () => {
       cancelled = true
     }
   }, [])
 
+  const friskhet = hoved.status === "ok" ? hoved.data.friskhet : null
+  const tall = hoved.status === "ok" ? hoved.data.tall : null
+  const laster = hoved.status === "laster"
+
   return (
-    <>
+    <div className="mx-auto max-w-5xl">
       {/* Header */}
-      <div>
-        <h1 className="text-lg font-semibold text-gray-900 sm:text-xl dark:text-gray-50">
+      <header>
+        <h1
+          className="text-[22px] font-medium text-[var(--os-text-primary)]"
+          style={{ letterSpacing: "-0.6px" }}
+        >
           Butikk
         </h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Shopify · siste {WINDOW_DAYS} hele dager, til og med i går
+        <p className="jbm mt-1.5 flex flex-wrap items-center gap-x-2 text-[11px] text-[var(--os-text-muted)]">
+          <span>Shopify · siste {WINDOW_DAYS} hele dager, til og med i går</span>
+          {friskhet && (
+            <>
+              <span aria-hidden="true">·</span>
+              <Friskhet friskhet={friskhet} />
+            </>
+          )}
         </p>
+      </header>
+
+      {hoved.status === "feil" && <Feilkort tittel="Shopify-tall" hint={hoved.hint} />}
+      {hoved.status === "tom" && (
+        <Feilkort tittel="Shopify-tall" hint="Ingen ordrer registrert i perioden." stille />
+      )}
+
+      {/* KPI-rad: en stil, ett tall per kort, ingen gjentakelse lenger ned */}
+      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <KpiCard
+          label="Omsetning"
+          tooltip={`Sum ordreverdi fra Shopify siste ${WINDOW_DAYS} hele dager, alle ordrestatuser (brutto).`}
+          value={laster ? "…" : tall ? kr(tall.omsetning) : "n/a"}
+          {...deltaProps(tall?.delta.omsetning)}
+          width="72%"
+        />
+        <KpiCard
+          label="Netto omsetning"
+          tooltip="Omsetning uten refunderte og annullerte ordrer. Delvis refunderte ordrer er med, siden refundert beløp ikke er tilgjengelig ennå."
+          value={
+            detalj.status === "laster"
+              ? "…"
+              : detalj.status === "ok"
+                ? kr(detalj.data.netto.omsetning)
+                : "n/a"
+          }
+          delta={
+            detalj.status === "ok" && detalj.data.netto.utelatt > 0
+              ? `${num(detalj.data.netto.utelatt)} ordrer holdt utenfor`
+              : undefined
+          }
+          trend="up"
+          width="64%"
+        />
+        <KpiCard
+          label="Ordrer"
+          tooltip={`Antall Shopify-ordrer siste ${WINDOW_DAYS} hele dager, alle statuser.`}
+          value={laster ? "…" : tall ? num(tall.ordrer) : "n/a"}
+          {...deltaProps(tall?.delta.ordrer)}
+          width="55%"
+        />
+        <KpiCard
+          label="Snittordre"
+          tooltip="Omsetning delt på antall ordrer i perioden."
+          value={laster ? "…" : tall ? kr(tall.snittordre) : "n/a"}
+          {...deltaProps(tall?.delta.snittordre)}
+          width="48%"
+        />
+        <KpiCard
+          label="Solgte enheter"
+          tooltip="Antall solgte enheter i perioden, summert fra ordrelinjene."
+          value={laster ? "…" : tall ? num(tall.enheter) : "n/a"}
+          delta={
+            detalj.status === "ok"
+              ? `${num(detalj.data.ulikeProdukter)} ulike produkter`
+              : undefined
+          }
+          trend="up"
+          width="40%"
+        />
       </div>
 
-      {tilstand.status === "feil" && (
-        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          <p className="font-medium">Kunne ikke lese Shopify-tall</p>
-          <p className="mt-1 text-xs">
-            {tilstand.melding} · ingen tall vises, siden vi ikke har noen.
-          </p>
-        </div>
-      )}
-
-      {(tilstand.status === "ok" || tilstand.status === "tom") && (
-        <Kildelinje friskhet={tilstand.friskhet} />
-      )}
-
-      {tilstand.status === "tom" && (
-        <div className="mt-4 rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
-          Ingen Shopify-data registrert i denne perioden.
-        </div>
-      )}
-
-      {/* KPIer */}
-      <section className="mt-6">
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {tilstand.status === "laster"
-            ? Array.from({ length: 4 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"
+      {/* Produkter · Kunder · Lager */}
+      <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <OsCard title="Topprodukter" className="lg:col-span-1">
+          {detalj.status === "laster" ? (
+            <Skeleton rader={5} />
+          ) : detalj.status !== "ok" ? (
+            <Tomt hint={detalj.status === "feil" ? detalj.hint : "Ingen salg i perioden."} />
+          ) : (
+            <ol className="space-y-1.5">
+              {detalj.data.topp.map((p, i) => (
+                <li
+                  key={`${p.navn}-${i}`}
+                  className="flex items-baseline justify-between gap-3 text-[12px]"
                 >
-                  <div className="h-3 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
-                  <div className="mt-3 h-7 w-24 animate-pulse rounded bg-gray-200 dark:bg-gray-800" />
-                </div>
-              ))
-            : tilstand.status === "ok" && (
-                <>
-                  <Kpi
-                    navn="Omsetning"
-                    forklaring={`Sum ordreverdi fra Shopify siste ${WINDOW_DAYS} hele dager. Brutto: kansellerte og refunderte ordrer er med, siden synken henter alle statuser.`}
-                    verdi={kr(tilstand.tall.omsetning)}
-                    delta={tilstand.tall.delta.omsetning}
-                  />
-                  <Kpi
-                    navn="Ordrer"
-                    forklaring={`Antall Shopify-ordrer siste ${WINDOW_DAYS} hele dager, alle statuser.`}
-                    verdi={num(tilstand.tall.ordrer)}
-                    delta={tilstand.tall.delta.ordrer}
-                  />
-                  <Kpi
-                    navn="Snittordre"
-                    forklaring="Omsetning delt på antall ordrer i perioden."
-                    verdi={kr(tilstand.tall.snittordre)}
-                    delta={tilstand.tall.delta.snittordre}
-                    fremhevet
-                  />
-                  <Kpi
-                    navn="Solgte enheter"
-                    forklaring="Totalt antall solgte enheter i perioden, summert fra ordrelinjene. Antall ulike produkter kan ikke leses ut ennå, se listen nederst."
-                    verdi={num(tilstand.tall.enheter)}
-                  />
-                </>
-              )}
-        </div>
-      </section>
+                  <span className="min-w-0 truncate text-[var(--os-text-secondary)]">
+                    <span className="jbm mr-1.5 text-[10px] text-[var(--os-text-muted)]">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    {p.navn}
+                  </span>
+                  <span className="jbm shrink-0 tabular-nums text-[var(--os-text-primary)]">
+                    {kr(p.omsetning)}
+                    <span className="ml-1.5 text-[10px] text-[var(--os-text-muted)]">
+                      {num(p.enheter)} stk
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </OsCard>
 
-      {/* Ærlig gjeldsliste - erstatter det mocken pleide aa vise */}
-      <section className="mt-10">
-        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-50">
-          Ikke tilgjengelig ennå
-        </h2>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Dette viste den gamle siden med oppdiktede tall. Det er fjernet
-          framfor erstattet, og står her til kilden faktisk finnes.
-        </p>
-        <div className="mt-4 divide-y divide-gray-200 overflow-hidden rounded-lg border border-gray-200 dark:divide-gray-800 dark:border-gray-800">
-          {IKKE_TILGJENGELIG.map((rad) => (
-            <div key={rad.navn} className="bg-white p-4 dark:bg-gray-900">
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-50">
-                {rad.navn}
-              </p>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {rad.hvorfor}
+        <OsCard title="Kunder">
+          {detalj.status === "laster" ? (
+            <Skeleton rader={3} />
+          ) : detalj.status !== "ok" ? (
+            <Tomt hint={detalj.status === "feil" ? detalj.hint : "Ingen ordrer i perioden."} />
+          ) : (
+            <div className="space-y-3">
+              <Segment
+                navn="Nye kunder"
+                ordrer={detalj.data.kunder.nye.ordrer}
+                andel={detalj.data.kunder.nye.andel}
+              />
+              <Segment
+                navn="Returnerende"
+                ordrer={detalj.data.kunder.returnerende.ordrer}
+                andel={detalj.data.kunder.returnerende.andel}
+                farge="var(--os-purple)"
+              />
+              {detalj.data.kunder.ukjent.ordrer > 0 && (
+                <p className="jbm text-[10px] text-[var(--os-text-muted)]">
+                  {num(detalj.data.kunder.ukjent.ordrer)} ordrer uten kundeprofil
+                </p>
+              )}
+            </div>
+          )}
+        </OsCard>
+
+        <OsCard title="Lager">
+          {lager.status === "laster" ? (
+            <Skeleton rader={3} />
+          ) : lager.status !== "ok" ? (
+            <Tomt hint={lager.status === "feil" ? lager.hint : "Ingen lagerdata."} />
+          ) : (
+            <div>
+              <div className="grid grid-cols-3 gap-2">
+                <MiniTall navn="produkter" verdi={num(lager.data.produkter)} />
+                <MiniTall navn="på lager" verdi={num(lager.data.enheter)} />
+                <MiniTall
+                  navn="utsolgt"
+                  verdi={num(lager.data.utsolgt)}
+                  varsel={lager.data.utsolgt > 0}
+                />
+              </div>
+              {lager.data.lavtListe.length > 0 ? (
+                <div className="mt-3">
+                  <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
+                    Lav beholdning (≤ {lager.data.terskel})
+                  </p>
+                  <ul className="mt-1 space-y-1">
+                    {lager.data.lavtListe.slice(0, 6).map((p) => (
+                      <li
+                        key={p.navn}
+                        className="flex items-baseline justify-between gap-3 text-[12px]"
+                      >
+                        <span className="min-w-0 truncate text-[var(--os-text-secondary)]">
+                          {p.navn}
+                        </span>
+                        <span
+                          className={cx(
+                            "jbm shrink-0 tabular-nums",
+                            p.antall <= 0
+                              ? "text-[var(--os-danger)]"
+                              : "text-[var(--os-warning)]",
+                          )}
+                        >
+                          {num(p.antall)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {lager.data.lavt > 6 && (
+                    <p className="jbm mt-1 text-[10px] text-[var(--os-text-muted)]">
+                      + {num(lager.data.lavt - 6)} til
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-3 text-[12px] text-[var(--os-text-secondary)]">
+                  Ingen produkter under {lager.data.terskel} på lager.
+                </p>
+              )}
+              <p className="jbm mt-3 text-[10px] text-[var(--os-text-muted)]">
+                Lest {format(new Date(lager.data.hentet), "d. MMM HH:mm")}
               </p>
             </div>
+          )}
+        </OsCard>
+      </div>
+
+      {/* Det som fortsatt mangler - en linje hver, detaljer bak en utvidelse */}
+      <section className="mt-8">
+        <div className="flex items-center gap-x-1.5 px-1">
+          <span
+            className="size-1.5 rounded-full bg-[var(--os-text-muted)]"
+            aria-hidden="true"
+          />
+          <h2 className="jbm text-[10px] uppercase tracking-wide text-[var(--os-text-muted)]">
+            Ikke koblet til ennå
+          </h2>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {IKKE_KOBLET.map((rad) => (
+            <OsCard key={rad.navn}>
+              <p className="text-[13px] font-medium text-[var(--os-text-primary)]">
+                {rad.navn}
+              </p>
+              <p className="mt-1 text-[12px] text-[var(--os-text-secondary)]">
+                {rad.status}
+              </p>
+              <details className="mt-2">
+                <summary className="jbm cursor-pointer text-[10px] uppercase tracking-wide text-[var(--os-text-muted)] hover:text-[var(--os-accent)]">
+                  Vis detaljer
+                </summary>
+                <p className="mt-1.5 text-[11px] leading-snug text-[var(--os-text-muted)]">
+                  {rad.detaljer}
+                </p>
+              </details>
+            </OsCard>
           ))}
         </div>
       </section>
-    </>
+    </div>
+  )
+}
+
+function Friskhet({ friskhet }: { friskhet: Datafriskhet }) {
+  const stale = friskhet.data_mode === "stale"
+  if (friskhet.sist_synket === null) {
+    return <span className="text-[var(--os-warning)]">ingen synk registrert</span>
+  }
+  return (
+    <span className={stale ? "text-[var(--os-warning)]" : undefined}>
+      synket {format(new Date(friskhet.sist_synket), "d. MMM HH:mm")}
+      {stale && " · eldre enn normalt"}
+    </span>
+  )
+}
+
+function Feilkort({
+  tittel,
+  hint,
+  stille = false,
+}: {
+  tittel: string
+  hint: string
+  stille?: boolean
+}) {
+  return (
+    <div
+      className={cx(
+        "mt-4 rounded-[var(--os-radius-md)] border-[0.5px] px-4 py-3 text-[12px]",
+        stille
+          ? "border-[var(--os-border)] text-[var(--os-text-secondary)]"
+          : "border-[var(--os-danger)]/40 bg-[var(--os-danger)]/10 text-[var(--os-danger)]",
+      )}
+    >
+      <span className="font-medium">{tittel}:</span> {hint}
+    </div>
+  )
+}
+
+function Tomt({ hint }: { hint: string }) {
+  return (
+    <p className="text-[12px] leading-snug text-[var(--os-text-secondary)]">
+      {hint}
+    </p>
+  )
+}
+
+function Skeleton({ rader }: { rader: number }) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: rader }).map((_, i) => (
+        <div
+          key={i}
+          className="h-3 animate-pulse rounded bg-[var(--os-bg-hover)]"
+          style={{ width: `${90 - i * 12}%` }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function Segment({
+  navn,
+  ordrer,
+  andel: a,
+  farge = "var(--os-accent)",
+}: {
+  navn: string
+  ordrer: number
+  andel: number | null
+  farge?: string
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between text-[12px]">
+        <span className="text-[var(--os-text-secondary)]">{navn}</span>
+        <span className="jbm tabular-nums text-[var(--os-text-primary)]">
+          {andel(a)}
+          <span className="ml-1.5 text-[10px] text-[var(--os-text-muted)]">
+            {num(ordrer)} ordrer
+          </span>
+        </span>
+      </div>
+      <div className="mt-1 h-1 overflow-hidden rounded bg-[var(--os-bg-hover)]">
+        <div
+          className="h-full rounded"
+          style={{ width: `${Math.round((a ?? 0) * 100)}%`, background: farge }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function MiniTall({
+  navn,
+  verdi,
+  varsel = false,
+}: {
+  navn: string
+  verdi: string
+  varsel?: boolean
+}) {
+  return (
+    <div>
+      <p
+        className={cx(
+          "text-[18px] font-medium tabular-nums leading-tight",
+          varsel ? "text-[var(--os-warning)]" : "text-[var(--os-text-primary)]",
+        )}
+        style={{ letterSpacing: "-0.4px" }}
+      >
+        {verdi}
+      </p>
+      <p className="jbm text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
+        {navn}
+      </p>
+    </div>
   )
 }

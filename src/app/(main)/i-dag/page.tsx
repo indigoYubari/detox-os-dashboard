@@ -6,6 +6,7 @@ import { Headphones, Megaphone, Receipt, Store } from "lucide-react"
 
 import { siteConfig } from "@/app/siteConfig"
 import {
+  ApiError,
   getMetrics,
   getRecommendations,
   type DeltaValue,
@@ -19,7 +20,6 @@ import {
   ChangesSection,
   ChangesSkeleton,
 } from "@/components/i-dag/ChangesSection"
-import { KpiCard, KpiCardSkeleton } from "@/components/i-dag/KpiCard"
 import { KpiCard as OsKpiCard } from "@/components/ui/KpiCard"
 import { OsCard } from "@/components/ui/OsCard"
 import { StatTooltip } from "@/components/ui/StatTooltip"
@@ -33,6 +33,7 @@ import {
 } from "@/components/i-dag/PriorityCard"
 import { ShortcutCard } from "@/components/i-dag/ShortcutCard"
 import {
+  deltaLabel,
   kr,
   lastSyncLabel,
   longNorwegianDate,
@@ -40,7 +41,6 @@ import {
   num,
   previousFrom,
   roasLabel,
-  roasTone,
 } from "@/components/i-dag/format"
 
 // Snapshot window - 30 days, matching Oversikt and the Annonser pages. The
@@ -110,12 +110,19 @@ type Kpi = {
   value: string
   delta?: DeltaValue | null
   tone?: "good-up" | "neutral"
-  valueClassName?: string
-  caption?: string
+  tooltip: string
+  /** Bredde paa bunnlinja i OsKpiCard - dekorativ. */
+  width: string
+  barGradient?: string
 }
 
 // Build the five headline numbers, deriving AOV/ROAS trends from the
 // recoverable previous-period totals the comparison exposes.
+//
+// Fram til 2026-09-15 fantes to rader med de samme tallene: en "hi-tech"
+// topprad uten deltaer og en "Dagens tall"-rad i en annen stil med deltaer.
+// Samme tall to steder i to layouter var hovedkilden til "rotete" (Orion 15.09,
+// design-krav 7). Naa: en rad, en stil, med deltaene.
 function buildKpis(metrics: MetricsResponse): Kpi[] {
   const { shopifyRevenue, adSpend } = metrics.totals
   const orders = metrics.totals.shopifyOrders ?? 0
@@ -139,30 +146,53 @@ function buildKpis(metrics: MetricsResponse): Kpi[] {
 
   return [
     {
-      label: "Shopify-omsetning",
+      label: "Omsetning",
+      tooltip: `Total Shopify-omsetning siste ${WINDOW_DAYS} dager, alle ordrestatuser.`,
       value: kr(shopifyRevenue),
       delta: comp?.shopifyRevenue,
+      width: "72%",
     },
-    { label: "Ordrer", value: num(orders), delta: comp?.shopifyOrders },
+    {
+      label: "Ordrer",
+      tooltip: `Antall Shopify-ordrer siste ${WINDOW_DAYS} dager.`,
+      value: num(orders),
+      delta: comp?.shopifyOrders,
+      width: "55%",
+    },
     {
       label: "Snittordre",
-      value: aov != null ? kr(aov) : "-",
+      tooltip: "Gjennomsnittlig ordreverdi: omsetning delt på antall ordrer.",
+      value: aov != null ? kr(aov) : "n/a",
       delta: aovDelta,
+      width: "48%",
     },
     {
       label: "Annonsespend",
+      tooltip: `Totalt annonseforbruk (Google Ads + Meta) siste ${WINDOW_DAYS} dager.`,
       value: kr(adSpend),
       delta: comp?.adSpend,
       tone: "neutral",
+      width: "40%",
     },
     {
-      label: "Blended ROAS",
-      caption: "MER · Shopify-omsetning ÷ totalt annonseforbruk",
+      label: "ROAS",
+      tooltip: "Blended ROAS (MER): Shopify-omsetning delt på totalt annonseforbruk. Over 3x er bra.",
       value: roasLabel(roas),
       delta: roasDelta,
-      valueClassName: roasTone(roas),
+      width: "90%",
+      barGradient: "linear-gradient(90deg, var(--os-accent), var(--os-purple))",
     },
   ]
+}
+
+// Delta-tekst + retning for OsKpiCard. Retningen maa sendes eksplisitt: kortet
+// utleder den ellers fra om teksten starter med "-", og deltaLabel starter
+// med en pil. Noeytral tone (annonsespend) faar ingen farge-retning.
+function kpiDelta(k: Kpi): { delta?: string; trend?: "up" | "down" } {
+  if (!k.delta || k.delta.pct == null) return {}
+  const text = `${deltaLabel(k.delta)} mot forrige ${WINDOW_DAYS} d`
+  if (k.tone === "neutral") return { delta: text, trend: "up" }
+  return { delta: text, trend: k.delta.dir === "down" ? "down" : "up" }
 }
 
 // ── Live mini-kort: typer for de tre API-rutene ──
@@ -187,8 +217,8 @@ type ShopifyIDag = {
 // saa kortene har tre tilstander - ikke to. "Laster" og "ingen kilde" saa
 // tidligere helt like ut: begge var en skeleton som aldri ble til noe.
 type KildeFeil = "ikke_konfigurert" | "utilgjengelig"
-type Kilde<T> = { data: T | null; feil: KildeFeil | null }
-const LASTER: Kilde<never> = { data: null, feil: null }
+type Kilde<T> = { data: T | null; feil: KildeFeil | null; hint: string | null }
+const LASTER: Kilde<never> = { data: null, feil: null, hint: null }
 
 // Deterministisk 7-stolpers sparkline-form fra et tall. Dekorativ - selve
 // hovedtallet er ekte; sparklinen gir kun visuell bevegelse.
@@ -215,7 +245,14 @@ const COA_VARIANT: Record<string, "error" | "warning"> = {
 }
 
 export default function IDagPage() {
-  const today = React.useMemo(() => new Date(), [])
+  // Settes etter mount: siden ble fram til 2026-09-15 forhaandsrendret ved
+  // bygg, og datoen i HTML-en var deploy-dagen ("loerdag 12. september") til
+  // hydreringen tok over. Med null foer mount rendres ingen dato som kan
+  // vaere feil - og serveren (UTC) og nettleseren (Oslo) kan ikke bli uenige.
+  const [today, setToday] = React.useState<Date | null>(null)
+  React.useEffect(() => {
+    setToday(new Date())
+  }, [])
   const [metrics, setMetrics] = React.useState<MetricsResponse | null>(null)
   const [recs, setRecs] = React.useState<Recommendation[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -243,15 +280,25 @@ export default function IDagPage() {
         const res = await fetch(url, { cache: "no-store" })
         if (cancelled) return
         if (res.ok) {
-          set({ data: (await res.json()) as T, feil: null })
+          set({ data: (await res.json()) as T, feil: null, hint: null })
           return
+        }
+        // Rutene svarer alltid JSON med `hint` (source-state.ts) - den ene
+        // linja eieren skal lese. Uten den sto det bare "utilgjengelig".
+        let hint: string | null = null
+        try {
+          const j = (await res.json()) as { hint?: unknown }
+          if (typeof j.hint === "string") hint = j.hint
+        } catch {
+          /* ikke JSON */
         }
         set({
           data: null,
           feil: res.status === 503 ? "ikke_konfigurert" : "utilgjengelig",
+          hint,
         })
       } catch {
-        if (!cancelled) set({ data: null, feil: "utilgjengelig" })
+        if (!cancelled) set({ data: null, feil: "utilgjengelig", hint: null })
       }
     }
     void loadCard<GmailData>("/api/gmail/uleste", setGmail)
@@ -263,6 +310,7 @@ export default function IDagPage() {
   }, [])
 
   React.useEffect(() => {
+    if (!today) return
     const since = format(subDays(today, WINDOW_DAYS), "yyyy-MM-dd")
     const until = format(today, "yyyy-MM-dd")
     let cancelled = false
@@ -278,9 +326,15 @@ export default function IDagPage() {
         setRecs(r.recommendations)
         setLoading(false)
       })
-      .catch((e: Error) => {
+      .catch((e: unknown) => {
         if (cancelled) return
-        setError(e.message ?? "Kunne ikke laste dagens data")
+        // Rutens hint er den ene linja eieren skal lese; statuskoden er for
+        // loggen, ikke for Kim og Anniken.
+        setError(
+          e instanceof ApiError && e.hint
+            ? e.hint
+            : "Dagens tall kunne ikke leses akkurat nå.",
+        )
         setLoading(false)
       })
     return () => {
@@ -352,9 +406,13 @@ export default function IDagPage() {
             </span>
           </div>
           <div className="jbm mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--os-text-muted)]">
-            <span className="first-letter:uppercase">
-              {longNorwegianDate(today)}
-            </span>
+            {today ? (
+              <span className="first-letter:uppercase">
+                {longNorwegianDate(today)}
+              </span>
+            ) : (
+              <span className="inline-block h-3 w-40 animate-pulse rounded bg-[var(--os-bg-hover)]" />
+            )}
             {metrics?.lastSync && (
               <>
                 <span aria-hidden="true">·</span>
@@ -365,41 +423,31 @@ export default function IDagPage() {
         </header>
       </FadeUp>
 
-      {/* ── Headline KPI-rad ── */}
+      {/* ── KPI-rad: en rad, en stil, med deltaer ── */}
       <FadeUp delay={80}>
-        <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <OsKpiCard
-            label="Omsetning" tooltip="Total Shopify-omsetning siste 30 dager."
-            value={metrics ? kr(metrics.totals.shopifyRevenue) : "n/a"}
-            width="72%"
-          />
-          <OsKpiCard
-            label="Ordrer" tooltip="Antall fullforte Shopify-ordrer siste 30 dager."
-            value={metrics ? num(metrics.totals.shopifyOrders ?? 0) : "n/a"}
-            width="55%"
-          />
-          <OsKpiCard
-            label="ROAS" tooltip="Return on Ad Spend: hvor mye salg du far per krone brukt pa annonser. Over 3x er bra."
-            value={
-              metrics && metrics.totals.adSpend > 0
-                ? roasLabel(
-                    metrics.totals.shopifyRevenue / metrics.totals.adSpend,
-                  )
-                : "n/a"
-            }
-            width="90%"
-            barGradient="linear-gradient(90deg, var(--os-accent), var(--os-purple))"
-          />
-          <OsKpiCard
-            label="AOV"
-            tooltip="Average Order Value: gjennomsnittlig ordreverdi. Hoyere AOV = bedre margin."
-            value={
-              metrics && metrics.totals.shopifyOrders && metrics.totals.shopifyOrders > 0
-                ? kr(metrics.totals.shopifyRevenue / metrics.totals.shopifyOrders)
-                : "n/a"
-            }
-            width="48%"
-          />
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {loading || !metrics
+            ? Array.from({ length: 5 }).map((_, i) => (
+                <OsKpiCard
+                  key={i}
+                  label={["Omsetning", "Ordrer", "Snittordre", "Annonsespend", "ROAS"][i]}
+                  value={error ? "n/a" : "…"}
+                  delta={error && i === 0 ? "kunne ikke lese tallene" : undefined}
+                  trend="down"
+                  width="0%"
+                />
+              ))
+            : kpis.map((k) => (
+                <OsKpiCard
+                  key={k.label}
+                  label={k.label}
+                  tooltip={k.tooltip}
+                  value={k.value}
+                  {...kpiDelta(k)}
+                  width={k.width}
+                  barGradient={k.barGradient}
+                />
+              ))}
         </div>
       </FadeUp>
 
@@ -411,35 +459,6 @@ export default function IDagPage() {
 
       {/* ── Launchpad ── */}
       <LaunchpadSection />
-
-      {/* ── Dagens tall ── */}
-      <section className="mt-8">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-50">
-            Dagens tall
-          </h2>
-          <p className="text-xs text-gray-400 dark:text-gray-500">
-            mot forrige {WINDOW_DAYS} dager
-          </p>
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {loading
-            ? Array.from({ length: 5 }).map((_, i) => (
-                <KpiCardSkeleton key={i} />
-              ))
-            : kpis.map((k) => (
-                <KpiCard
-                  key={k.label}
-                  label={k.label}
-                  value={k.value}
-                  delta={k.delta}
-                  tone={k.tone}
-                  valueClassName={k.valueClassName}
-                  caption={k.caption}
-                />
-              ))}
-        </div>
-      </section>
 
       {/* ── Dagens viktigste + Hva endret seg ── */}
       <div className="mt-10 grid grid-cols-1 gap-x-8 gap-y-10 lg:grid-cols-2">
@@ -654,7 +673,7 @@ export default function IDagPage() {
           {/* Gmail: uleste + kategorier + sparkline */}
           <OsCard title="Gmail">
             {gmail.feil !== null ? (
-              <KildeFeilVisning feil={gmail.feil} kilde="Gmail" />
+              <KildeFeilVisning feil={gmail.feil} kilde="Gmail" hint={gmail.hint} />
             ) : gmail.data === null ? (
               <MiniSkeleton withSpark />
             ) : (
@@ -693,7 +712,7 @@ export default function IDagPage() {
           {/* Klaviyo: siste kampanjes open rate + sparkline */}
           <OsCard title="Klaviyo">
             {klaviyo.feil !== null ? (
-              <KildeFeilVisning feil={klaviyo.feil} kilde="Klaviyo" />
+              <KildeFeilVisning feil={klaviyo.feil} kilde="Klaviyo" hint={klaviyo.hint} />
             ) : klaviyo.data === null ? (
               <MiniSkeleton withSpark />
             ) : (
@@ -726,7 +745,7 @@ export default function IDagPage() {
           {/* Shopify: dagens ordrer + omsetning, teal på positive tall */}
           <OsCard title="Shopify i dag">
             {shopifyToday.feil !== null ? (
-              <KildeFeilVisning feil={shopifyToday.feil} kilde="Shopify" />
+              <KildeFeilVisning feil={shopifyToday.feil} kilde="Shopify" hint={shopifyToday.hint} />
             ) : shopifyToday.data === null ? (
               <MiniSkeleton />
             ) : (
@@ -780,9 +799,11 @@ export default function IDagPage() {
 function KildeFeilVisning({
   feil,
   kilde,
+  hint,
 }: {
   feil: KildeFeil
   kilde: string
+  hint: string | null
 }) {
   return (
     <div className="text-[11px] leading-snug text-red-400">
@@ -791,8 +812,8 @@ function KildeFeilVisning({
           ? `${kilde} ikke koblet til`
           : `${kilde} utilgjengelig`}
       </p>
-      <p className="jbm mt-1 text-[9px] uppercase tracking-wide text-[var(--os-text-muted)]">
-        ingen tall å vise
+      <p className="mt-1 text-[10px] leading-snug text-[var(--os-text-secondary)]">
+        {hint ?? "Ingen tall å vise."}
       </p>
     </div>
   )

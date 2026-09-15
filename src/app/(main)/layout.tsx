@@ -1,6 +1,15 @@
 import { ParticleBackground } from "@/components/ui/ParticleBackground"
 import { Topbar } from "@/components/ui/navigation/Topbar"
 
+// Alle sider under (main) ligger bak innlogging og leser levende data i
+// nettleseren. Uten dette ble ti av dem forhaandsrendret ved BYGG, og HTML-en
+// som ble servert var oeyeblikksbildet fra deploy-dagen: /i-dag viste
+// "loerdag 12. september" og fire n/a til hydreringen tok over (Orion 15.09).
+// Paa en treg linje er det ikke et glimt - det er siden. Vurdert per side:
+// ingen av dem har innhold som er gyldig uten en sesjon, saa ingen tjener paa
+// statisk prerender. Settes en gang her, ikke ti ganger.
+export const dynamic = "force-dynamic"
+
 export default function Layout({
   children,
 }: Readonly<{

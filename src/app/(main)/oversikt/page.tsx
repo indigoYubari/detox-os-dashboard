@@ -20,6 +20,7 @@ type OversiktData = {
     emailRevenue7d: number
     listSize: number | null
     listName: string | null
+    listSizeReason?: string | null
   } | null
   errors?: { shopify?: string; klaviyo?: string }
 }
@@ -133,6 +134,11 @@ export default function OversiktPage() {
                     ? `Listestørrelse: ${data.klaviyo.listName}`
                     : "Listestørrelse"
                 }
+                tooltip={
+                  data?.klaviyo?.listSize == null && data?.klaviyo?.listSizeReason
+                    ? data.klaviyo.listSizeReason
+                    : "Antall profiler i den største Klaviyo-listen."
+                }
                 value={
                   loading
                     ? "…"
@@ -140,6 +146,12 @@ export default function OversiktPage() {
                       ? num(data.klaviyo.listSize)
                       : "ikke tilgjengelig"
                 }
+                delta={
+                  !loading && data?.klaviyo?.listSize == null
+                    ? (data?.klaviyo?.listSizeReason ?? undefined)
+                    : undefined
+                }
+                trend="down"
                 width="60%"
               />
             </div>
