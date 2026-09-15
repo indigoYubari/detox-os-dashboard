@@ -5,6 +5,7 @@ import {
   liveMeta,
   NotConfiguredError,
   sourceErrorResponse,
+  upstreamErrorSummary,
   UpstreamStatusError,
   type LiveMeta,
 } from "@/lib/source-state"
@@ -25,14 +26,22 @@ const KLAVIYO_REVISION = "2024-10-15"
 // Noekkelen i prod er gyldig (metrics og values-reports virker), men mangler
 // campaigns:read - kjent siden 2026-08-25, eid av Klaviyo-kontoens eier.
 // Fram til 2026-09-15 ble det til "Kunne ikke hente" uten forklaring.
-function klaviyoFeil(status: number, scope: string, hva: string): Error {
-  if (status === 401 || status === 403) {
+async function klaviyoFeil(res: Response, scope: string, hva: string): Promise<Error> {
+  if (res.status === 401 || res.status === 403) {
     return new ForbiddenError(
-      `Klaviyo svarte ${status} - noekkelen mangler ${scope}`,
+      `Klaviyo svarte ${res.status} - noekkelen mangler ${scope}`,
       `Klaviyo-nøkkelen mangler tilgang til ${scope}. Kontoeieren må utvide nøkkelens rettigheter.`,
     )
   }
-  return new UpstreamStatusError(`Klaviyo ${hva} svarte ${status}`, status)
+  // Live 2026-09-15 var svaret 400 - Klaviyo avviser selve forespoerselen.
+  // Ta med hva den sier, ellers kan ingen se det fra dashbordet.
+  let detail: string | null = null
+  try {
+    detail = upstreamErrorSummary(await res.json())
+  } catch {
+    /* ikke JSON */
+  }
+  return new UpstreamStatusError(`Klaviyo ${hva} svarte ${res.status}`, res.status, detail)
 }
 
 export const dynamic = "force-dynamic"
@@ -66,7 +75,7 @@ async function latestEmailCampaign(): Promise<LatestCampaign> {
     "?filter=equals(messages.channel,'email')" +
     "&sort=-created_at&page[size]=1"
   const res = await fetch(url, { headers: HEADERS(), cache: "no-store" })
-  if (!res.ok) throw klaviyoFeil(res.status, "kampanjer", "campaigns")
+  if (!res.ok) throw await klaviyoFeil(res, "kampanjer", "campaigns")
   const json = (await res.json()) as {
     data?: {
       id: string
@@ -124,7 +133,7 @@ async function campaignRates(
       }),
     },
   )
-  if (!res.ok) throw klaviyoFeil(res.status, "kampanjerapporter", "values-report")
+  if (!res.ok) throw await klaviyoFeil(res, "kampanjerapporter", "values-report")
   const json = (await res.json()) as {
     data?: {
       attributes?: {
