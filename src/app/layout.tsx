@@ -15,24 +15,16 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains",
 })
 
-import { Sidebar } from "@/components/ui/navigation/sidebar"
 import { siteConfig } from "./siteConfig"
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://yoururl.com"),
+  metadataBase: new URL(siteConfig.url),
   title: siteConfig.name,
   description: siteConfig.description,
   keywords: [],
-  authors: [
-    {
-      name: "yourname",
-      url: "",
-    },
-  ],
-  creator: "yourname",
   openGraph: {
     type: "website",
-    locale: "en_US",
+    locale: "nb_NO",
     url: siteConfig.url,
     title: siteConfig.name,
     description: siteConfig.description,
@@ -40,35 +32,39 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Tremor OSS Dashboard",
-    creator: "@tremorlabs",
+    title: siteConfig.name,
+    description: siteConfig.description,
   },
   icons: {
     icon: "/favicon.ico",
   },
 }
 
+// Rot-layouten er naa et nakent skall: html, fonter, tema. Den gamle, moerke
+// appen legger sin egen ramme — sidebar, topbar, partikkelbakgrunn — i
+// (main)/layout.tsx, og den nye lyse flaten legger sin i (ny)/layout.tsx.
+//
+// Foer la rot-layouten paa en sidebar ogsaa paa /login og paa 404-siden, og
+// alle sider laa inne i <main className="lg:pl-[200px]"> — ogsaa de som ikke
+// har en sidebar aa lene seg paa. Én ramme, ett sted.
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="no">
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} overflow-y-scroll scroll-auto antialiased`}
         suppressHydrationWarning
       >
-        <div className="mx-auto max-w-screen-2xl">
-          <ThemeProvider
-            defaultTheme="dark"
-            attribute="class"
-            enableSystem={false}
-          >
-            <Sidebar />
-            <main className="lg:pl-[200px]">{children}</main>
-          </ThemeProvider>
-        </div>
+        <ThemeProvider
+          defaultTheme="dark"
+          attribute="class"
+          enableSystem={false}
+        >
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   )

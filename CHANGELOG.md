@@ -4,6 +4,47 @@ All notable changes to Detox OS Dashboard should be documented here.
 
 ## Unreleased
 
+### 2026-09-16 — «Dagens»: ny, lys forside for Kim og Anniken
+
+En ny flate for eierne, bygget ved siden av den gamle. Det gamle dashbordet er
+uendret og ligger fortsatt på `/overview` med sin egen meny.
+
+#### Added
+
+- **`/` — «Dagens».** Fire seksjoner, ett klart svar hver, detaljer bak et
+  klikk: butikken i går, hva som venter på et ja/nei, hva agentene fant i
+  natt, og kundeservice. Én lede-setning øverst som peker på det som faktisk
+  krever et menneske — køen går foran omsetningen.
+- **Nytt lyst designsystem** (`src/app/(ny)/lys.css`), scopet til `.lys`.
+  Kremhvitt, mørk tekst, én aksentfarge, mye luft. Ingen Tailwind-klasser i
+  den nye flaten — den skal kunne leses som ett dokument.
+- **Rene hjelpere med tester** (`src/app/(ny)/dagens.ts`): dato på norsk,
+  kroner og tall, varighet, nattens funn, køen, og lede-setningen. 17 nye
+  tester (281 totalt).
+
+#### Changed
+
+- **Rot-layouten er nå et nakent skall** (`html`, fonter, tema). Den gamle
+  rammen — sidebar, topbar, partikkelbakgrunn — er flyttet til
+  `(main)/layout.tsx`. Før la rot-layouten på en sidebar også på `/login` og
+  på 404-siden, og alle sider lå inne i `<main className="lg:pl-[200px]">`,
+  også de som ikke har en sidebar å lene seg på.
+- **`/` omdirigerer ikke lenger til `/overview`.** Den nye flaten eier `/`.
+  Nettlesere som har cachet den permanente omdirigeringen kan trenge én
+  omlasting.
+- **Metadata var fortsatt Tremor-malen**: `metadataBase` pekte på
+  `yoururl.com`, forfatter var `yourname`, `twitter.creator` var
+  `@tremorlabs` og tittelen var «Tremor OSS Dashboard». Nå `os.detox.no`,
+  `detox.OS`, `nb_NO` og `lang="no"`.
+
+#### Depends on
+
+- Køen leses fra `requests` (migrasjon 0008) og natten fra `findings ⋈
+  reports`. Én seksjon viser en navngitt feil hvis en av dem mangler grants.
+- `/butikk`-tallene på `/` kommer fra ad-agentens `GET /api/metrics` for i går
+  og `GET /api/metrics/inventory`; kundeservice fra `/api/gmail/kundeservice`.
+  Ingen av dem faller tilbake til mock.
+
 ### 2026-09-15 — eier-flaten presentabel igjen (Orion CC-DASHBOARD-15-09)
 
 #### Changed
