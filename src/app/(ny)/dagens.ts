@@ -104,7 +104,7 @@ export function nattensFunn(
   }
 }
 
-// ── Køen som venter ─────────────────────────────────────────────────────────
+// ── Køene ───────────────────────────────────────────────────────────────────
 
 export type Koen = {
   antall: number
@@ -112,7 +112,16 @@ export type Koen = {
   eldsteAlder: string | null
 }
 
-/** Alt som venter paa et ja/nei eller et svar. Sortert eldste foerst. */
+/**
+ * `requests` er AGENTENES arbeidskø — oppdrag fra Kim og fra detox-gpt til
+ * Anakin, med status open/in_progress/done. Den er IKKE eiernes
+ * godkjenningskø.
+ *
+ * Dette ble lest feil 17.09: lede-setningen sa «N ting venter på et ja eller
+ * nei» og telte disse radene, mens det som faktisk ventet på Kim og Anniken var
+ * 22 stemme-utkast og 8 P0-helsetråder hos Raphael. Funksjonen beholder navnet
+ * sitt, men teksten under påstår ikke lenger at et menneske må svare.
+ */
 export function koen(rows: readonly RequestRow[], naa: Date): Koen {
   const sortert = [...rows].sort((a, b) =>
     a.created_at.localeCompare(b.created_at),
@@ -128,22 +137,23 @@ export function koen(rows: readonly RequestRow[], naa: Date): Koen {
 // ── Leden ───────────────────────────────────────────────────────────────────
 
 /**
- * Den ene setningen oeverst. Den skal peke paa det som faktisk krever et
- * menneske — ikke paa det stoerste tallet. Rekkefoelgen under er bevisst:
- * en koe som venter gaar foran en omsetning som gikk bra, fordi omsetningen
- * ikke er noe aa bestemme.
+ * Den ene setningen oeverst. Den skal si noe SANT om dagen, ikke noe stort.
  *
- * Returnerer ferdig tekst slik at setningen kan testes som den leses.
+ * Rekkefoelgen er bevisst: nattens funn er det ferskeste vi vet om, og de
+ * kommer fra agenter som faktisk har kjort. Agentkoeen nevnes som nummer to,
+ * som en tilstand — ikke som en oppgave til et menneske.
+ *
+ * Det vi ennå IKKE har en kilde for, og derfor ikke sier noe om: hva som venter
+ * på et ja/nei fra Kim og Anniken (22 stemme-utkast, 8 P0-helsetråder). Se
+ * `prosjekter/detox.no/open/koblingskart-2026-09-17.md` i Brain.
  */
 export function lede(koe: Koen, natt: NattensFunn): string {
-  if (koe.antall > 0) {
-    const alder = koe.eldsteAlder
-      ? ` Den eldste har ventet ${koe.eldsteAlder}.`
-      : ""
-    return `${koe.antall} ting venter på et ja eller nei.${alder}`
-  }
+  const iKoe = koe.antall > 0 ? ` ${koe.antall} oppdrag står i kø.` : ""
   if (natt.funn.length > 0) {
-    return `Ingenting venter på dere. Agentene la fra seg ${natt.funn.length} funn i natt.`
+    return `Agentene la fra seg ${natt.funn.length} funn i natt.${iKoe}`
   }
-  return "Ingenting venter på dere, og natten var stille."
+  if (koe.antall > 0) {
+    return `${koe.antall} oppdrag står i kø hos agentene.`
+  }
+  return "Stille natt, og ingenting i kø."
 }

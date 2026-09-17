@@ -165,33 +165,42 @@ describe("koen", () => {
 describe("lede", () => {
   const tomNatt = nattensFunn([], NAA)
 
-  it("peker paa koeen naar noe venter — det er det eneste som krever et menneske", () => {
+  // Lede-setningen påstod fram til 17.09 at agentenes arbeidskø var noe Kim og
+  // Anniken måtte svare på. Den køen er agentenes, ikke deres. Setningen sier
+  // nå bare det vi faktisk vet.
+  it("nevner natten først, og køen som en tilstand", () => {
     const k = koen([koeRad("a", "2026-09-12T06:00:00Z")], NAA)
     const natt = nattensFunn(
       [funn("f", "agent-anakinbot", "2026-09-16T03:00:00Z")],
       NAA,
     )
     expect(lede(k, natt)).toBe(
-      "1 ting venter på et ja eller nei. Den eldste har ventet 4 dager.",
+      "Agentene la fra seg 1 funn i natt. 1 oppdrag står i kø.",
     )
   })
 
-  it("faller tilbake til natten naar koeen er tom", () => {
-    const natt = nattensFunn(
+  it("sier bare køen når natten var tom", () => {
+    const k = koen(
       [
-        funn("f1", "agent-anakinbot", "2026-09-16T03:00:00Z"),
-        funn("f2", "agent-indigobot", "2026-09-16T04:00:00Z"),
+        koeRad("a", "2026-09-12T06:00:00Z"),
+        koeRad("b", "2026-09-13T06:00:00Z"),
+        koeRad("c", "2026-09-15T06:00:00Z"),
       ],
       NAA,
     )
-    expect(lede(koen([], NAA), natt)).toBe(
-      "Ingenting venter på dere. Agentene la fra seg 2 funn i natt.",
-    )
+    expect(lede(k, tomNatt)).toBe("3 oppdrag står i kø hos agentene.")
   })
 
-  it("sier det som det er naar begge er tomme", () => {
+  it("påstår aldri at et menneske må svare på agentkøen", () => {
+    const k = koen([koeRad("a", "2026-09-12T06:00:00Z")], NAA)
+    const tekst = lede(k, tomNatt)
+    expect(tekst).not.toMatch(/venter på et ja eller nei/i)
+    expect(tekst).not.toMatch(/dere/i)
+  })
+
+  it("sier det som det er når begge er tomme", () => {
     expect(lede(koen([], NAA), tomNatt)).toBe(
-      "Ingenting venter på dere, og natten var stille.",
+      "Stille natt, og ingenting i kø.",
     )
   })
 })
