@@ -198,7 +198,7 @@ export default async function DagensSide() {
               </Liste>
             </Detaljer>
             <Knapper>
-              <Link className="ny-knapp primaer" href="/eiere">
+              <Link className="ny-knapp primaer" href="/koe">
                 Gå gjennom køen
               </Link>
             </Knapper>

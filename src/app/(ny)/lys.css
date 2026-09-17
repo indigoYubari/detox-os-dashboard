@@ -356,3 +356,100 @@
     flex: 0 0 52px;
   }
 }
+
+/* ── /koe: postene ──────────────────────────────────────────── */
+
+.ny-dato a {
+  color: var(--ny-dempet);
+  text-decoration: none;
+  letter-spacing: normal;
+  text-transform: none;
+  font-size: 13px;
+}
+
+.ny-dato a:hover {
+  color: var(--ny-aksent);
+}
+
+.ny-filter {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.ny-filter a {
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--ny-linje);
+  color: var(--ny-tekst-2);
+  background: var(--ny-flate);
+  text-decoration: none;
+}
+
+.ny-filter a:hover {
+  border-color: var(--ny-aksent-linje);
+}
+
+.ny-filter a.valgt {
+  border-color: var(--ny-aksent);
+  color: var(--ny-aksent);
+  background: var(--ny-aksent-svak);
+}
+
+.ny-post {
+  padding: 16px 0 4px;
+  border-top: 1px solid var(--ny-linje-svak);
+  margin-top: 12px;
+}
+
+.ny-post-topp {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--ny-dempet);
+  margin-bottom: 6px;
+}
+
+.ny-lapp {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--ny-aksent-svak);
+  color: var(--ny-aksent);
+}
+
+.ny-lapp.haster {
+  background: var(--ny-varsel-svak);
+  color: var(--ny-varsel);
+}
+
+.ny-post-tittel {
+  font-size: 16.5px;
+  font-weight: 500;
+  margin: 0;
+  color: var(--ny-tekst);
+}
+
+.ny-post-detalj {
+  font-size: 14px;
+  color: var(--ny-tekst-2);
+  margin: 4px 0 0;
+}
+
+.ny-kvittering {
+  font-size: 13px;
+  color: var(--ny-aksent);
+  align-self: center;
+}
+
+.ny-feil {
+  font-size: 13px;
+  color: var(--ny-varsel);
+  align-self: center;
+}
