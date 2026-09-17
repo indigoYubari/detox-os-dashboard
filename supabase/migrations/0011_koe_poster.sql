@@ -97,6 +97,13 @@ create policy "koe_poster owner decide"
 -- Leftover fra 0009 (default privileges): koer skal være ren lesing for eierne.
 revoke references, trigger on public.koer from authenticated;
 
+-- Tabellen over ble laget FØR default-endringen under, i samme transaksjon, og
+-- arvet derfor de gamle default-grantene (authenticated: alt). Trekk dem tilbake
+-- og gi kolonne-granten på nytt. (Oppdaget ved kjøring 17.09 og rettet samme
+-- kveld; ligger her så fila er sann og idempotent.)
+revoke insert, update, delete, truncate, references, trigger, maintain on public.koe_poster from authenticated;
+grant update (status, avgjort_av, avgjort_at, oppdatert) on public.koe_poster to authenticated;
+
 -- ── Del 2: rotårsaken ─────────────────────────────────────────────────────────
 -- Nye tabeller i public laget av rollen postgres (Management API, SQL Editor):
 -- kun SELECT til authenticated, ingenting til anon. service_role beholder alt.
@@ -107,6 +114,8 @@ alter default privileges for role postgres in schema public
   revoke insert, update, delete, truncate, references, trigger on tables from authenticated;
 alter default privileges for role postgres in schema public
   revoke all on tables from anon;
+alter default privileges for role postgres in schema public
+  revoke maintain on tables from authenticated;
 
 commit;
 

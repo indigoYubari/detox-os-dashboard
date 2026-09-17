@@ -66,7 +66,9 @@ export default async function KoeSide({
 
   const venter = poster.ok ? forEier(poster.venter, filter) : []
   const grupper_ = grupper(venter)
-  const medPoster = new Set(grupper_.map((g) => g.koe_id))
+  // «Uten poster» maales mot ALLE ventende poster, ikke de filtrerte: en koe som
+  // bare har poster til den andre eieren har poster, den er bare ikke dennes.
+  const medPoster = new Set((poster.ok ? poster.venter : []).map((p) => p.koe_id))
   const koerUtenPoster: Koe[] = koer.ok
     ? koer.koer.filter((k) => !medPoster.has(k.id) && k.antall > 0)
     : []
