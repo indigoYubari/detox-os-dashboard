@@ -7,6 +7,9 @@
 
 import type { FindingRow } from "@/lib/radar"
 import type { RequestRow } from "@/lib/eiere"
+import type { KortRad } from "@/lib/kunnskap-server"
+import type { RaadRad } from "@/lib/raad-server"
+import type { RunStateRad } from "@/lib/system-server"
 
 const TZ = "Europe/Oslo"
 
@@ -192,4 +195,193 @@ export function lede(v: Venter, koe: Koen, natt: NattensFunn): string {
     return `Ingenting venter på dere. ${koe.antall} oppdrag står i kø hos agentene.`
   }
   return "Stille natt, og ingenting i kø."
+}
+
+// ── Annonse-raadene ─────────────────────────────────────────────────────────
+
+export type Alvor = "critical" | "warning" | "info"
+
+export type Raad = {
+  id: string
+  tittel: string
+  /** Kort kanalnavn, passer i merkelapp-kolonnen: «Google», «Meta», «Klaviyo». */
+  kanal: string
+  alvor: Alvor
+  created_at: string
+}
+
+/** Hvor mange raad forsiden viser. Resten finnes i basen — de er ikke borte, de er ikke oeverst. */
+export const RAAD_TOPP = 3
+
+const ALVOR_RANG: Record<Alvor, number> = { critical: 0, warning: 1, info: 2 }
+
+const KANAL_NAVN: Record<string, string> = {
+  "google-ads": "Google",
+  meta: "Meta",
+  klaviyo: "Klaviyo",
+  samlet: "Samlet",
+}
+
+/** «ads.update_suppression_list.warning» → «warning». Alvoret bor sist i kind; ukjent = info. */
+export function raadAlvor(kind: string): Alvor {
+  const s = kind.slice(kind.lastIndexOf(".") + 1)
+  return s === "critical" || s === "warning" ? s : "info"
+}
+
+/** Posteren legger ad-agentens id bakerst i action («… [ad-agent #1506]»). Det er sporing, ikke tekst. */
+export function raadTittel(action: string): string {
+  return action.replace(/\s*\[ad-agent #[^\]]+\]\s*$/, "").trim()
+}
+
+/** «ads-funn:google-ads» → «Google». Kanalen bor i report_type, ikke i kind. */
+export function raadKanal(reportType: string | null | undefined): string {
+  if (!reportType) return "Annonser"
+  const i = reportType.indexOf(":")
+  const slug = i > 0 ? reportType.slice(i + 1) : reportType
+  return KANAL_NAVN[slug] ?? slug
+}
+
+/**
+ * De faa raadene som er verdt et menneske: alvorligst foerst, deretter nyest.
+ * 82 ventende raad skal aldri staa paa forsiden — tre skal.
+ */
+export function raadTopp(rows: readonly RaadRad[], n: number = RAAD_TOPP): Raad[] {
+  return rows
+    .map((r) => ({
+      id: r.id,
+      tittel: raadTittel(r.action),
+      kanal: raadKanal(r.report.report_type),
+      alvor: raadAlvor(r.kind),
+      created_at: r.created_at,
+    }))
+    .sort(
+      (a, b) =>
+        ALVOR_RANG[a.alvor] - ALVOR_RANG[b.alvor] ||
+        b.created_at.localeCompare(a.created_at),
+    )
+    .slice(0, n)
+}
+
+// ── Kortene ─────────────────────────────────────────────────────────────────
+
+export type KortVisning = {
+  id: string
+  story: string
+  title: string
+  status: string
+  utdrag: string
+  updated_at: string
+}
+
+export type KortStatus = {
+  aktive: number
+  utkast: number
+  /** Nyeste updated_at over alle kort — grunnlag for «sist synket». */
+  nyeste: string | null
+  /** Aktive foerst, saa utkast; nyeste foerst innenfor hver gruppe. Superseded vises ikke. */
+  kort: KortVisning[]
+}
+
+/** Foerste setningene av «betydning for Detox» — det kortet egentlig sier. */
+export function kortUtdrag(body: unknown, maks: number = 120): string {
+  if (!body || typeof body !== "object") return ""
+  const v = (body as Record<string, unknown>).betydning_for_detox
+  if (typeof v !== "string") return ""
+  const t = v.replace(/\s+/g, " ").trim()
+  return t.length > maks ? `${t.slice(0, maks - 1).trimEnd()}…` : t
+}
+
+function kortRang(status: string): number {
+  return status === "active" ? 0 : status === "draft" ? 1 : 2
+}
+
+export function kortStatus(rows: readonly KortRad[]): KortStatus {
+  const synlige = rows.filter((r) => r.status !== "superseded")
+  const kort = [...synlige]
+    .sort(
+      (a, b) =>
+        kortRang(a.status) - kortRang(b.status) ||
+        b.updated_at.localeCompare(a.updated_at),
+    )
+    .map((r) => ({
+      id: r.id,
+      story: r.story,
+      title: r.title,
+      status: r.status,
+      utdrag: kortUtdrag(r.body),
+      updated_at: r.updated_at,
+    }))
+  const tider = rows.map((r) => r.updated_at).sort()
+  return {
+    aktive: synlige.filter((r) => r.status === "active").length,
+    utkast: synlige.filter((r) => r.status === "draft").length,
+    nyeste: tider.length > 0 ? tider[tider.length - 1] : null,
+    kort,
+  }
+}
+
+// ── Systemet ────────────────────────────────────────────────────────────────
+
+/**
+ * En agent som ikke har kjoert paa saa mange timer, er stille. Nattjobbene gaar
+ * én gang i doegnet; 30 timer gir rom for at en kjoering er sen uten at siden
+ * roper.
+ */
+export const STILLE_TIMER = 30
+
+const AGENT_NAVN: Record<string, string> = {
+  "agent-indigobot": "IndigoBot",
+  "agent-anakinbot": "Anakin",
+  "agent-ads": "Annonsemotoren",
+}
+
+export type SystemLinje = {
+  navn: string
+  alder: string | null
+  ok: boolean
+  feil: string | null
+}
+
+export type SystemStatus = {
+  linjer: SystemLinje[]
+  /** Navnene paa agentene som ikke har kjoert vellykket innenfor STILLE_TIMER. */
+  stille: string[]
+}
+
+export function systemStatus(
+  rows: readonly RunStateRad[],
+  naa: Date,
+  maksTimer: number = STILLE_TIMER,
+): SystemStatus {
+  const grense = naa.getTime() - maksTimer * 3_600_000
+  const linjer = rows.map((r) => {
+    const t = r.last_successful_run
+      ? new Date(r.last_successful_run).getTime()
+      : Number.NaN
+    const fersk = !Number.isNaN(t) && t >= grense
+    const status = r.last_run_status ?? "ok"
+    return {
+      navn: AGENT_NAVN[r.agent_id] ?? r.agent_id,
+      alder: r.last_successful_run ? varighet(r.last_successful_run, naa) : null,
+      ok: fersk && status === "ok",
+      feil: status !== "ok" ? (r.last_error ?? status) : null,
+    }
+  })
+  return { linjer, stille: linjer.filter((l) => !l.ok).map((l) => l.navn) }
+}
+
+// ── Kundeservice ────────────────────────────────────────────────────────────
+
+/**
+ * Raphaels pass gaar hver natt klokka 03:00 UTC og skriver koe-raden naar det
+ * er ferdig. Er raden eldre enn maksTimer, er tallet fra et tidligere pass —
+ * og det skal siden si, ikke late som det er dagens.
+ */
+export function koeFersk(
+  oppdatert: string | null | undefined,
+  naa: Date,
+  maksTimer: number = STILLE_TIMER,
+): boolean {
+  const h = timerSiden(oppdatert, naa)
+  return h !== null && h < maksTimer
 }

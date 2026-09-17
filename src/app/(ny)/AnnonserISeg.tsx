@@ -7,8 +7,9 @@ import { ApiError, getMetrics, type MetricsResponse } from "@/lib/detox-api"
 import { CHANNEL_LABELS, kr as adKr, pctLabel, roasLabel } from "@/lib/ad-format"
 
 import { Detaljer } from "./Detaljer"
+import { RaadBlokk } from "./Raad"
 import { Hjelp, Knapper, Linje, Liste, Seksjon, Stille, Svar } from "./Seksjon"
-import { tall } from "./dagens"
+import { tall, type Raad } from "./dagens"
 
 /** Kanalene som faktisk koster penger. Shopify/Klaviyo er egne seksjoner. */
 const BETALTE = ["google_ads", "meta"]
@@ -27,8 +28,18 @@ function dagerSiden(n: number): string {
  * «Annonser». Svarer paa det ene en eier maa vite om betalt media: hva vi la
  * ut, og hva vi fikk igjen. Kanalene som gaar med tap listes i detaljene —
  * det er de som krever en beslutning.
+ *
+ * Raadene (`raad`) kommer fra serveren, ikke herfra: de er lest fra basen med
+ * eierens session foer siden ble sendt. Tallene hentes i klienten fra
+ * ad-backenden. Feiler den, staar raadene likevel.
  */
-export function AnnonserISeg() {
+export function AnnonserISeg({
+  raad,
+  raadFeil,
+}: {
+  raad: Raad[]
+  raadFeil: string | null
+}) {
   const [tilstand, setTilstand] = useState<Tilstand>({ slag: "laster" })
 
   useEffect(() => {
@@ -57,6 +68,7 @@ export function AnnonserISeg() {
           <strong>…</strong>
         </Svar>
         <Hjelp>Henter de siste 30 dagene.</Hjelp>
+        <RaadBlokk raad={raad} feil={raadFeil} />
       </Seksjon>
     )
   }
@@ -67,6 +79,7 @@ export function AnnonserISeg() {
         <Stille>
           <span className="varsel">Ingen annonsetall.</span> {tilstand.hint}
         </Stille>
+        <RaadBlokk raad={raad} feil={raadFeil} />
       </Seksjon>
     )
   }
@@ -83,6 +96,7 @@ export function AnnonserISeg() {
     return (
       <Seksjon merkelapp="Annonser">
         <Stille>Ingen annonseutgifter registrert de siste 30 dagene.</Stille>
+        <RaadBlokk raad={raad} feil={raadFeil} />
       </Seksjon>
     )
   }
@@ -102,6 +116,9 @@ export function AnnonserISeg() {
         ) : (
           "Alle kanaler tjener seg inn."
         )}
+        {raad.length > 0
+          ? ` ${raad.length} ${raad.length === 1 ? "råd" : "råd"} fra annonsemotoren venter på dere.`
+          : ""}
       </Hjelp>
       <Detaljer tekst="Se per kanal">
         <Liste>
@@ -113,6 +130,7 @@ export function AnnonserISeg() {
           ))}
         </Liste>
       </Detaljer>
+      <RaadBlokk raad={raad} feil={raadFeil} />
       <Knapper>
         <Link className="ny-knapp" href="/annonser">
           Åpne annonser

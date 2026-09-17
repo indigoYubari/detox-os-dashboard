@@ -3,7 +3,7 @@ import Link from "next/link"
 
 import "./lys.css"
 
-// Den nye flaten for Kim og Anniken. Lyst, rolig, ett svar per seksjon.
+// Den nye flaten for Indigo og Anniken. Lyst, rolig, ett svar per seksjon.
 // Ligger ved siden av den gamle (main)-flaten, som beholder sin moerke drakt
 // og sine egne tokens — se lys.css.
 //
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
   title: "Dagens — detox.OS",
-  description: "Det Kim og Anniken trenger å vite i dag",
+  description: "Det Indigo og Anniken trenger å vite i dag",
 }
 
 export default function NyLayout({
