@@ -1,0 +1,340 @@
+/* ──────────────────────────────────────────────────────────────
+   Rolig brief — lyst designsystem for den nye dashbordflaten.
+
+   Alt er scopet til .lys, som settes paa rot-elementet i (ny)/layout.
+   Den gamle, moerke flaten under (main) er derfor uroert: den leser
+   sine egne --os-* tokens fra globals.css og ser noeyaktig lik ut.
+
+   Grunnregelen for denne flaten: ETT klart svar per seksjon. Detaljer
+   ligger bak et klikk, aldri i broedteksten. Mye luft, faerre ting.
+   ────────────────────────────────────────────────────────────── */
+
+.lys {
+  /* Flate og tekst */
+  --ny-bg: #fbf9f4;
+  --ny-flate: #ffffff;
+  --ny-linje: #e8e3d8;
+  --ny-linje-svak: #f1ede3;
+  --ny-tekst: #191a17;
+  --ny-tekst-2: #4a4c45;
+  --ny-dempet: #8b8c81;
+
+  /* Én aksentfarge. Alt annet er graatoner. */
+  --ny-aksent: #0f766e;
+  --ny-aksent-svak: #e6f2ef;
+  --ny-aksent-linje: #c8e2dc;
+
+  /* Varsel brukes bare naar noe faktisk krever handling. */
+  --ny-varsel: #9a5b00;
+  --ny-varsel-svak: #fbf1e0;
+  --ny-varsel-linje: #efdfc4;
+
+  --ny-font: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
+}
+
+.lys {
+  min-height: 100vh;
+  background: var(--ny-bg);
+  color: var(--ny-tekst);
+  font-family: var(--ny-font);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ny-ramme {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 28px 96px;
+}
+
+/* ── topp ───────────────────────────────────────────────────── */
+
+.ny-topp {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28px 0 0;
+  margin-bottom: 64px;
+  gap: 16px;
+}
+
+.ny-merke {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ny-tekst);
+}
+
+.ny-merke span {
+  color: var(--ny-dempet);
+  font-weight: 500;
+}
+
+.ny-topp-hoyre {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12.5px;
+  color: var(--ny-dempet);
+}
+
+.ny-topp-hoyre a {
+  color: var(--ny-dempet);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.ny-topp-hoyre a:hover {
+  color: var(--ny-aksent);
+  border-bottom-color: var(--ny-aksent-linje);
+}
+
+/* ── hilsen og lede ─────────────────────────────────────────── */
+
+.ny-hilsen {
+  margin-bottom: 56px;
+}
+
+.ny-dato {
+  font-size: 12.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ny-dempet);
+  margin-bottom: 14px;
+}
+
+.ny-lede {
+  font-size: 34px;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  max-width: 24ch;
+  margin: 0;
+}
+
+.ny-lede em {
+  font-style: normal;
+  color: var(--ny-aksent);
+}
+
+/* ── seksjon ────────────────────────────────────────────────── */
+
+.ny-seksjon {
+  border-top: 1px solid var(--ny-linje);
+  padding: 26px 0;
+}
+
+.ny-seksjon:last-of-type {
+  border-bottom: 1px solid var(--ny-linje);
+}
+
+.ny-rad {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.ny-merkelapp {
+  flex: 0 0 132px;
+  font-size: 12px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ny-dempet);
+  padding-top: 5px;
+}
+
+.ny-kropp {
+  flex: 1;
+  min-width: 0;
+}
+
+.ny-svar {
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.ny-svar strong {
+  font-size: 26px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.ny-hjelp {
+  font-size: 14.5px;
+  color: var(--ny-tekst-2);
+  margin-top: 5px;
+}
+
+.ny-hjelp .ok {
+  color: var(--ny-aksent);
+}
+
+.ny-hjelp .varsel {
+  color: var(--ny-varsel);
+}
+
+/* Tomt/feil skal se tomt/feil ut — aldri et nulltall som ligner et svar. */
+.ny-stille {
+  font-size: 14.5px;
+  color: var(--ny-dempet);
+}
+
+.ny-stille .varsel {
+  color: var(--ny-varsel);
+}
+
+/* ── detaljer bak et klikk ──────────────────────────────────── */
+
+.ny-vis {
+  margin-top: 12px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ny-dempet);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ny-vis:hover {
+  color: var(--ny-aksent);
+}
+
+.ny-vis .pil {
+  transition: transform 180ms ease-out;
+  display: inline-block;
+}
+
+.ny-vis[aria-expanded="true"] .pil {
+  transform: rotate(90deg);
+}
+
+.ny-detaljer {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 260ms ease-out;
+}
+
+.ny-detaljer.opp {
+  max-height: 420px;
+}
+
+.ny-detaljer ul {
+  list-style: none;
+  padding: 14px 0 4px;
+  margin: 0;
+}
+
+.ny-detaljer li {
+  display: flex;
+  gap: 12px;
+  padding: 7px 0;
+  font-size: 14px;
+  color: var(--ny-tekst-2);
+  border-bottom: 1px solid var(--ny-linje-svak);
+}
+
+.ny-detaljer li:last-child {
+  border-bottom: 0;
+}
+
+.ny-detaljer .n {
+  flex: 0 0 64px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ny-dempet);
+  font-size: 13px;
+}
+
+.ny-detaljer .t {
+  flex: 1;
+}
+
+.ny-detaljer .t b {
+  font-weight: 500;
+  color: var(--ny-tekst);
+}
+
+/* ── knapper ────────────────────────────────────────────────── */
+
+.ny-knapper {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.ny-knapp {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 9px;
+  padding: 7px 13px;
+  cursor: pointer;
+  border: 1px solid var(--ny-linje);
+  background: var(--ny-flate);
+  color: var(--ny-tekst);
+  text-decoration: none;
+  display: inline-block;
+}
+
+.ny-knapp:hover {
+  border-color: var(--ny-aksent-linje);
+  background: var(--ny-aksent-svak);
+}
+
+.ny-knapp.primaer {
+  background: var(--ny-aksent);
+  border-color: var(--ny-aksent);
+  color: #ffffff;
+}
+
+.ny-knapp.primaer:hover {
+  background: #0b5f59;
+}
+
+/* ── bunn ───────────────────────────────────────────────────── */
+
+.ny-bunn {
+  margin-top: 44px;
+  font-size: 12.5px;
+  color: var(--ny-dempet);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── skjermbredde ───────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .ny-ramme {
+    padding: 0 20px 72px;
+  }
+  .ny-topp {
+    margin-bottom: 44px;
+  }
+  .ny-hilsen {
+    margin-bottom: 40px;
+  }
+  .ny-lede {
+    font-size: 26px;
+  }
+  .ny-rad {
+    display: block;
+  }
+  .ny-merkelapp {
+    padding-top: 0;
+    margin-bottom: 8px;
+  }
+  .ny-detaljer .n {
+    flex: 0 0 52px;
+  }
+}

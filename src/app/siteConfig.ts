@@ -4,6 +4,10 @@ export const siteConfig = {
   description: "Operator-OS for detox.no",
   baseLinks: {
     home: "/",
+    /** Den nye, lyse flaten for Kim og Anniken. */
+    dagens: "/",
+    /** Det gamle dashbordet — naa bak /overview, ikke /. */
+    gammelt: "/overview",
     // Daglig
     eiere: "/eiere",
     idag: "/i-dag",
