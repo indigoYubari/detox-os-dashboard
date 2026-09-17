@@ -66,6 +66,94 @@ def read_statuses(readme: str) -> dict:
     return st
 
 
+KOE_ID = "kim-kort"
+KILDE = "sync-kim-cards"
+POSTER_TABELL_MANGLER = "koe_poster finnes ikke ennå (migrasjon 0011) — poster hoppes over"
+
+
+def rest(url: str, key: str, path: str, method: str = "GET", body=None, prefer: str | None = None):
+    """PostgREST med service_role. Returnerer (status, json-eller-tekst)."""
+    hdr = {"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json"}
+    if prefer:
+        hdr["Prefer"] = prefer
+    req = urllib.request.Request(f"{url}/rest/v1/{path}", data=json.dumps(body).encode() if body is not None else None,
+                                 headers=hdr, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            raw = r.read().decode()
+            return r.status, (json.loads(raw) if raw.strip() else None)
+    except urllib.error.HTTPError as e:
+        raw = e.read().decode()
+        try:
+            return e.code, json.loads(raw)
+        except ValueError:
+            return e.code, raw[:300]
+
+
+def tabell_mangler(st, res) -> bool:
+    return st == 404 or (isinstance(res, dict) and str(res.get("code")) == "PGRST205")
+
+
+def now_iso() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def utfor_avgjorelser(url: str, key: str) -> bool:
+    """Eierne har sagt ja/nei på /koe. Ja = kortet aktiveres. Kvitterer i utfort_*.
+    Returnerer False hvis koe_poster ikke finnes (0011 ikke kjørt)."""
+    st, poster = rest(url, key, f"koe_poster?koe_id=eq.{KOE_ID}&status=in.(ja,nei)&utfort_at=is.null&select=id,ekstern_id,status")
+    if tabell_mangler(st, poster):
+        print(POSTER_TABELL_MANGLER); return False
+    if st != 200 or not isinstance(poster, list):
+        print(f"koe_poster-lesing feilet HTTP {st}: {str(poster)[:200]}"); return True
+    for p in poster:
+        if p["status"] == "ja":
+            st2, res2 = rest(url, key, f"kim_cards?id=eq.{p['ekstern_id']}",
+                             "PATCH", {"status": "active", "requires_review": False, "updated_at": now_iso()}, "return=minimal")
+            if st2 not in (200, 204):
+                print(f"  aktivering feilet for {p['ekstern_id']}: HTTP {st2} {str(res2)[:160]}"); continue
+            print(f"  aktivert kort {p['ekstern_id']} (eierens ja)")
+        else:
+            print(f"  kort {p['ekstern_id']}: eieren sa nei — forblir utkast")
+        rest(url, key, f"koe_poster?id=eq.{p['id']}", "PATCH",
+             {"utfort_av": KILDE, "utfort_at": now_iso(), "oppdatert": now_iso()}, "return=minimal")
+    return True
+
+
+def skriv_poster(url: str, key: str, utkast: list) -> tuple[int, str | None]:
+    """Én post per utkast-kort (insert-only: en avgjort post skal ikke bli venter igjen).
+    Kort som ikke lenger er utkast får sine ventende poster satt til utgatt.
+    Returnerer (antall ventende, eldste opprettet)."""
+    for c in utkast:
+        body = {"koe_id": KOE_ID, "ekstern_id": c["id"], "tittel": c["title"],
+                "detalj": f"{c['story']} · versjon {c['version']}" + (f" — {c['utdrag']}" if c.get("utdrag") else ""),
+                "lenke": None, "prioritet": 2, "eier": "indigo", "handling": "ja-nei", "status": "venter", "kilde": KILDE}
+        st, res = rest(url, key, "koe_poster?on_conflict=koe_id,ekstern_id", "POST", body,
+                       "resolution=ignore-duplicates,return=minimal")
+        if st not in (200, 201, 204):
+            print(f"  post-feil for {c['story']}: HTTP {st} {str(res)[:160]}")
+    ids = ",".join(f'"{c["id"]}"' for c in utkast)
+    filt = f"&ekstern_id=not.in.({ids})" if utkast else ""
+    rest(url, key, f"koe_poster?koe_id=eq.{KOE_ID}&status=eq.venter{filt}", "PATCH",
+         {"status": "utgatt", "oppdatert": now_iso()}, "return=minimal")
+    st, venter = rest(url, key, f"koe_poster?koe_id=eq.{KOE_ID}&status=eq.venter&select=opprettet&order=opprettet.asc")
+    if st != 200 or not isinstance(venter, list):
+        return len(utkast), None
+    return len(venter), (venter[0]["opprettet"] if venter else None)
+
+
+def skriv_koe(url: str, key: str, antall: int, eldste, utkast_stories: list) -> None:
+    """Kø-raden til forsiden (tabell koer). Denne synken eier «kim-kort»."""
+    koe = {"id": KOE_ID, "navn": "Kort til godkjenning", "antall": antall, "eldste": eldste,
+           "detalj": (f"{antall} utkast venter på Indigo: " + ", ".join(utkast_stories)) if antall else "Ingen utkast venter. Alle kort er aktive.",
+           "kilde": KILDE, "oppdatert": now_iso()}
+    st, res = rest(url, key, "koer?on_conflict=id", "POST", koe, "resolution=merge-duplicates,return=minimal")
+    if st in (200, 201, 204):
+        print(f"OK: koer/{KOE_ID} = {antall} utkast")
+    else:
+        print(f"koer-feil HTTP {st}: {str(res)[:200]}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--icm", required=True, help="sti til mindmatter-icm-klone")
@@ -81,6 +169,19 @@ def main():
         commit = subprocess.run(["git", "-C", a.icm, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip() or None
     except Exception:
         commit = None
+
+    # 1) Eiernes avgjørelser først, så en aktivering står seg i steg 2.
+    poster_ok = True
+    if not a.dry_run:
+        poster_ok = utfor_avgjorelser(url, key)
+
+    # 2) Status: README kan gjøre et kort aktivt; et kort eieren har aktivert i basen degraderes aldri av README.
+    eksisterende = {}
+    if not a.dry_run:
+        st, rows_db = rest(url, key, "kim_cards?select=story,version,status")
+        if st == 200 and isinstance(rows_db, list):
+            eksisterende = {(r["story"], r["version"]): r["status"] for r in rows_db}
+
     rows = []
     for story in sorted(os.listdir(topics)):
         p = os.path.join(topics, story, "kim-kort.md")
@@ -88,63 +189,39 @@ def main():
         c = parse_card(open(p, encoding="utf-8").read())
         if not c["version"] or not c["title"]:
             print(f"HOPPER OVER {story}: mangler Versjon/tittel"); continue
+        readme = statuses.get(story, "draft")
+        i_basen = eksisterende.get((story, c["version"]))
+        status = "active" if (readme == "active" or i_basen == "active") else (i_basen or readme)
         rows.append({
             "story": story, "version": c["version"], "title": c["title"], "anchors": c["anchors"], "body": c["body"],
             "source_repo": "MindMatter1444/mindmatter-icm", "source_path": f"detox/indigo/jobs/topics/{story}/kim-kort.md",
-            "source_commit": commit, "status": statuses.get(story, "draft"), "requires_review": statuses.get(story, "draft") != "active",
-            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "source_commit": commit, "status": status, "requires_review": status != "active",
+            "updated_at": now_iso(),
         })
     print(f"{len(rows)} kort lest; status:", {r['story']: r['status'] for r in rows})
     if a.dry_run:
         print(json.dumps(rows[0], ensure_ascii=False, indent=1)[:1500] if rows else "ingen"); return
-    hdr = {"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json",
-           "Prefer": "resolution=merge-duplicates,return=representation"}
-    req = urllib.request.Request(f"{url}/rest/v1/kim_cards?on_conflict=story,version", data=json.dumps(rows).encode(), headers=hdr, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            got = json.loads(r.read()); print(f"OK: {len(got)} rader upsertet")
-    except urllib.error.HTTPError as e:
-        sys.exit(f"FEIL HTTP {e.code}: {e.read().decode()[:400]}")
-    # eldre versjoner av samme story → superseded
+
+    # 3) Kortene inn (upsert på story+version), eldre versjoner → superseded.
+    st, got = rest(url, key, "kim_cards?on_conflict=story,version", "POST", rows, "resolution=merge-duplicates,return=representation")
+    if st not in (200, 201) or not isinstance(got, list):
+        sys.exit(f"FEIL HTTP {st}: {str(got)[:400]}")
+    print(f"OK: {len(got)} rader upsertet")
     for r in rows:
-        req = urllib.request.Request(f"{url}/rest/v1/kim_cards?story=eq.{r['story']}&version=lt.{r['version']}&status=neq.superseded",
-                                     data=json.dumps({"status": "superseded"}).encode(), headers={**hdr, "Prefer": "return=minimal"}, method="PATCH")
-        try: urllib.request.urlopen(req, timeout=30)
-        except urllib.error.HTTPError as e: print("supersede-feil", r["story"], e.code)
-    write_koe(url, key, hdr, rows)
+        st2, res2 = rest(url, key, f"kim_cards?story=eq.{r['story']}&version=lt.{r['version']}&status=neq.superseded",
+                         "PATCH", {"status": "superseded"}, "return=minimal")
+        if st2 not in (200, 204): print("supersede-feil", r["story"], st2)
+
+    # 4) Poster for utkastene, og kø-raden.
+    utdrag = {r["story"]: (r["body"].get("betydning_for_detox") or "").strip().replace("\n", " ")[:140] for r in rows if isinstance(r.get("body"), dict)}
+    utkast = [{"id": g["id"], "story": g["story"], "version": g["version"], "title": g["title"], "utdrag": utdrag.get(g["story"], "")}
+              for g in got if g.get("status") == "draft"]
+    if poster_ok:
+        antall, eldste = skriv_poster(url, key, utkast)
+    else:
+        antall, eldste = len(utkast), None
+    skriv_koe(url, key, antall, eldste, sorted(u["story"] for u in utkast))
     print("OK: sync ferdig")
-
-
-KOE_ID = "kim-kort"
-
-
-def write_koe(url: str, key: str, hdr: dict, rows: list) -> None:
-    """Kø-raden til forsiden (tabell koer, eiernes køer): utkast som venter på Indigo.
-
-    Én skriver per rad — denne synken eier «kim-kort». Forsiden summerer alle rader i
-    «Venter på dere» og viser denne som én linje; ingen dashbordkode trengs for det.
-    Statusen kommer fra topics/README.md i ICM, samme kilde som kortene selv.
-    """
-    utkast = sorted(r["story"] for r in rows if r["status"] == "draft")
-    eldste = None
-    try:
-        q = urllib.request.Request(f"{url}/rest/v1/kim_cards?status=eq.draft&select=created_at&order=created_at.asc&limit=1",
-                                   headers={"apikey": key, "Authorization": "Bearer " + key})
-        with urllib.request.urlopen(q, timeout=30) as r:
-            got = json.loads(r.read())
-            eldste = got[0]["created_at"] if got else None
-    except (urllib.error.HTTPError, OSError, ValueError, KeyError, IndexError):
-        eldste = None
-    koe = {"id": KOE_ID, "navn": "Kort til godkjenning", "antall": len(utkast), "eldste": eldste,
-           "detalj": (f"{len(utkast)} utkast venter på Indigo: " + ", ".join(utkast)) if utkast else "Ingen utkast venter. Alle kort er aktive.",
-           "kilde": "sync-kim-cards", "oppdatert": datetime.datetime.now(datetime.timezone.utc).isoformat()}
-    req = urllib.request.Request(f"{url}/rest/v1/koer?on_conflict=id", data=json.dumps(koe).encode(),
-                                 headers={**hdr, "Prefer": "resolution=merge-duplicates,return=minimal"}, method="POST")
-    try:
-        urllib.request.urlopen(req, timeout=30)
-        print(f"OK: koer/{KOE_ID} = {len(utkast)} utkast")
-    except urllib.error.HTTPError as e:
-        print(f"koer-feil HTTP {e.code}: {e.read().decode()[:200]}")
 
 
 if __name__ == "__main__":
