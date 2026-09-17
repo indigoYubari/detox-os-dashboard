@@ -27,7 +27,10 @@ export default function LoginPage() {
       return
     }
 
-    router.push("/i-dag")
+    // Innlogging lander paa den nye forsiden. Foer gikk den til /i-dag, som er
+    // den gamle, moerke flaten — da ville eierne aldri sett den nye med mindre
+    // de husket adressen.
+    router.push("/")
     router.refresh()
   }
 

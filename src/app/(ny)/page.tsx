@@ -20,20 +20,40 @@ import { datoLang, koen, lede, nattensFunn, varighet, type Koen, type NattensFun
 const TOM_KOE: Koen = { antall: 0, eldste: null, eldsteAlder: null }
 const TOM_NATT: NattensFunn = { funn: [], perAgent: { anakin: 0, indigo: 0 }, siste: null }
 
+/**
+ * «/» er forsiden. Den skal aldri svare 500. Mangler en grant, eller svarer
+ * basen ikke, skal den ene seksjonen si det paa én linje — ikke hele siden bli
+ * en feilskjerm. Derfor fanger vi baade det Supabase returnerer som feil og
+ * det som kastes.
+ */
+function feilTekst(e: unknown): string {
+  return e instanceof Error && e.message
+    ? e.message
+    : "Klarte ikke lese fra basen."
+}
+
 async function lesKoe(): Promise<{ koe: Koen; feil: string | null }> {
-  const res = await fetchQueue()
-  if (!res.ok) return { koe: TOM_KOE, feil: res.error }
-  return { koe: koen(res.rows, new Date()), feil: null }
+  try {
+    const res = await fetchQueue()
+    if (!res.ok) return { koe: TOM_KOE, feil: res.error }
+    return { koe: koen(res.rows, new Date()), feil: null }
+  } catch (e) {
+    return { koe: TOM_KOE, feil: feilTekst(e) }
+  }
 }
 
 async function lesNatt(): Promise<{ natt: NattensFunn; feil: string | null }> {
-  const res = await fetchFindings(DEFAULT_FILTERS, 60)
-  const feil = Object.values(res).find((r) => !r.ok)
-  if (feil && !feil.ok) return { natt: TOM_NATT, feil: feil.error }
-  const rows: FindingRow[] = Object.values(res).flatMap((r) =>
-    r.ok ? r.rows : [],
-  )
-  return { natt: nattensFunn(rows, new Date()), feil: null }
+  try {
+    const res = await fetchFindings(DEFAULT_FILTERS, 60)
+    const feil = Object.values(res).find((r) => !r.ok)
+    if (feil && !feil.ok) return { natt: TOM_NATT, feil: feil.error }
+    const rows: FindingRow[] = Object.values(res).flatMap((r) =>
+      r.ok ? r.rows : [],
+    )
+    return { natt: nattensFunn(rows, new Date()), feil: null }
+  } catch (e) {
+    return { natt: TOM_NATT, feil: feilTekst(e) }
+  }
 }
 
 export default async function DagensSide() {
