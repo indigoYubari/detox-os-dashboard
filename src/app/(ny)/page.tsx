@@ -1,6 +1,7 @@
 import Link from "next/link"
 
 import { fetchQueue } from "@/lib/eiere-server"
+import { IKKE_KOBLET_TEKST, fetchKoer, type Koe } from "@/lib/koer-server"
 import { DEFAULT_FILTERS, type FindingRow } from "@/lib/radar"
 import { fetchFindings } from "@/lib/radar-server"
 
@@ -10,7 +11,7 @@ import { Detaljer } from "./Detaljer"
 import { EpostISeg } from "./EpostISeg"
 import { KundeserviceISeg } from "./KundeserviceISeg"
 import { Hjelp, Knapper, Linje, Liste, Seksjon, Stille, Svar } from "./Seksjon"
-import { datoLang, koen, lede, nattensFunn, varighet, type Koen, type NattensFunn } from "./dagens"
+import { datoLang, koen, lede, nattensFunn, varighet, venter, type Koen, type NattensFunn, type Venter } from "./dagens"
 
 // Server-komponent. To av de fire seksjonene leses her (koeen og natten — de
 // ligger i Supabase og leses med eierens egen session), de to andre hentes av
@@ -21,6 +22,7 @@ import { datoLang, koen, lede, nattensFunn, varighet, type Koen, type NattensFun
 
 const TOM_KOE: Koen = { antall: 0, eldste: null, eldsteAlder: null }
 const TOM_NATT: NattensFunn = { funn: [], perAgent: { anakin: 0, indigo: 0 }, siste: null }
+const TOM_VENTER: Venter = { totalt: 0, eldsteAlder: null }
 
 /**
  * «/» er forsiden. Den skal aldri svare 500. Mangler en grant, eller svarer
@@ -58,19 +60,76 @@ async function lesNatt(): Promise<{ natt: NattensFunn; feil: string | null }> {
   }
 }
 
+/**
+ * Eiernes køer. Tabellen «koer» finnes først når migrasjon 0009 er kjørt OG
+ * hub-jobben har skrevet én gang. Fram til da er svaret `ikke_koblet_til`, og
+ * seksjonen sier det — den later ikke som køen er tom.
+ */
+async function lesKoer(): Promise<{ koer: Koe[]; v: Venter; feil: string | null }> {
+  try {
+    const res = await fetchKoer()
+    if (!res.ok) {
+      return {
+        koer: [],
+        v: TOM_VENTER,
+        feil: res.code === "ikke_koblet_til" ? "ikke_koblet_til" : res.error,
+      }
+    }
+    return { koer: res.koer, v: venter(res.koer, new Date()), feil: null }
+  } catch (e) {
+    return { koer: [], v: TOM_VENTER, feil: feilTekst(e) }
+  }
+}
+
 export default async function DagensSide() {
   const naa = new Date()
-  const [{ koe, feil: koeFeil }, { natt, feil: nattFeil }] = await Promise.all([
-    lesKoe(),
-    lesNatt(),
-  ])
+  const [{ koe, feil: koeFeil }, { natt, feil: nattFeil }, koerRes] =
+    await Promise.all([lesKoe(), lesNatt(), lesKoer()])
+  const { koer, v, feil: koerFeil } = koerRes
 
   return (
     <>
       <div className="ny-hilsen">
         <div className="ny-dato">{datoLang(naa)}</div>
-        <h1 className="ny-lede">{lede(koe, natt)}</h1>
+        <h1 className="ny-lede">{lede(v, koe, natt)}</h1>
       </div>
+
+      <Seksjon merkelapp="Venter på dere">
+        {koerFeil === "ikke_koblet_til" ? (
+          <Stille>{IKKE_KOBLET_TEKST}</Stille>
+        ) : koerFeil ? (
+          <Stille>
+            <span className="varsel">Fikk ikke lest køene.</span> {koerFeil}
+          </Stille>
+        ) : v.totalt === 0 ? (
+          <Svar>Ingenting venter</Svar>
+        ) : (
+          <>
+            <Svar>
+              <strong>{v.totalt}</strong> ting venter på et ja eller nei
+            </Svar>
+            <Hjelp>
+              {v.eldsteAlder ? `Den eldste har ventet ${v.eldsteAlder}. ` : ""}
+              Alt er skrevet, ingenting er sendt.
+            </Hjelp>
+            <Detaljer tekst="Se køene">
+              <Liste>
+                {koer.map((k) => (
+                  <Linje key={k.id} n={k.navn}>
+                    <b>{k.antall}</b>
+                    {k.detalj ? ` — ${k.detalj}` : ""}
+                  </Linje>
+                ))}
+              </Liste>
+            </Detaljer>
+            <Knapper>
+              <Link className="ny-knapp primaer" href="/eiere">
+                Gå gjennom køen
+              </Link>
+            </Knapper>
+          </>
+        )}
+      </Seksjon>
 
       <ButikkISeg />
 

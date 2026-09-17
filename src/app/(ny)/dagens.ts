@@ -134,26 +134,62 @@ export function koen(rows: readonly RequestRow[], naa: Date): Koen {
   }
 }
 
+// ── Det som venter på et menneske ───────────────────────────────────────────
+
+export type Venter = {
+  totalt: number
+  eldsteAlder: string | null
+}
+
+/**
+ * Summen av EIERNES køer — `koer` (migrasjon 0009), skrevet av hub-jobben.
+ *
+ * Dette er den eneste kilden i denne filen som betyr «noe venter på Kim og
+ * Anniken». Fram til 2026-09-17 ble `requests` brukt til det, og det var feil:
+ * den er agentenes arbeidskø. Er `koer` ikke koblet til ennå, er totalt 0 — og
+ * da sier leden ikke at noe venter.
+ */
+export function venter(
+  koer: readonly { antall: number; eldste: string | null }[],
+  naa: Date,
+): Venter {
+  const totalt = koer.reduce((sum, k) => sum + k.antall, 0)
+  const tidligste = koer
+    .map((k) => k.eldste)
+    .filter((x): x is string => Boolean(x))
+    .sort()[0]
+  return {
+    totalt,
+    eldsteAlder: tidligste ? varighet(tidligste, naa) : null,
+  }
+}
+
 // ── Leden ───────────────────────────────────────────────────────────────────
 
 /**
  * Den ene setningen oeverst. Den skal si noe SANT om dagen, ikke noe stort.
  *
- * Rekkefoelgen er bevisst: nattens funn er det ferskeste vi vet om, og de
- * kommer fra agenter som faktisk har kjort. Agentkoeen nevnes som nummer to,
- * som en tilstand — ikke som en oppgave til et menneske.
+ * Rekkefoelgen er bevisst: det som venter paa et menneske gaar foran alt annet,
+ * fordi det er det eneste noen kan bestemme noe om. Deretter natten, som er det
+ * ferskeste vi vet om, og til slutt agentkoeen — som en tilstand, ikke som en
+ * oppgave.
  *
- * Det vi ennå IKKE har en kilde for, og derfor ikke sier noe om: hva som venter
- * på et ja/nei fra Kim og Anniken (22 stemme-utkast, 8 P0-helsetråder). Se
- * `prosjekter/detox.no/open/koblingskart-2026-09-17.md` i Brain.
+ * «Venter på et ja eller nei» er lov å si nå, men bare fordi `koer` faktisk
+ * teller eiernes køer. Den setningen stod her tidligere og telte feil ting.
  */
-export function lede(koe: Koen, natt: NattensFunn): string {
+export function lede(v: Venter, koe: Koen, natt: NattensFunn): string {
+  if (v.totalt > 0) {
+    const alder = v.eldsteAlder
+      ? ` Den eldste har ventet ${v.eldsteAlder}.`
+      : ""
+    return `${v.totalt} ting venter på et ja eller nei fra dere.${alder}`
+  }
   const iKoe = koe.antall > 0 ? ` ${koe.antall} oppdrag står i kø.` : ""
   if (natt.funn.length > 0) {
-    return `Agentene la fra seg ${natt.funn.length} funn i natt.${iKoe}`
+    return `Ingenting venter på dere. Agentene la fra seg ${natt.funn.length} funn i natt.${iKoe}`
   }
   if (koe.antall > 0) {
-    return `${koe.antall} oppdrag står i kø hos agentene.`
+    return `Ingenting venter på dere. ${koe.antall} oppdrag står i kø hos agentene.`
   }
   return "Stille natt, og ingenting i kø."
 }

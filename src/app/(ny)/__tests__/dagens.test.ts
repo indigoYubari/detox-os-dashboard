@@ -12,6 +12,7 @@ import {
   nattensFunn,
   tall,
   varighet,
+  venter,
 } from "../dagens"
 
 // Fast «naa» slik at testene ikke avhenger av klokka de kjoeres paa.
@@ -162,24 +163,63 @@ describe("koen", () => {
   })
 })
 
+describe("venter", () => {
+  it("summerer køene og finner den eldste", () => {
+    const v = venter(
+      [
+        { antall: 22, eldste: "2026-09-11T06:00:00Z" },
+        { antall: 8, eldste: "2026-09-09T06:00:00Z" },
+      ],
+      NAA,
+    )
+    expect(v.totalt).toBe(30)
+    expect(v.eldsteAlder).toBe("7 dager")
+  })
+
+  it("er null naar ingen kø er koblet til — ikke en feil", () => {
+    expect(venter([], NAA)).toEqual({ totalt: 0, eldsteAlder: null })
+  })
+
+  it("taler naar en kø mangler eldste-tidspunkt", () => {
+    const v = venter([{ antall: 5, eldste: null }], NAA)
+    expect(v.totalt).toBe(5)
+    expect(v.eldsteAlder).toBeNull()
+  })
+})
+
 describe("lede", () => {
   const tomNatt = nattensFunn([], NAA)
+  const ingenVenter = venter([], NAA)
 
-  // Lede-setningen påstod fram til 17.09 at agentenes arbeidskø var noe Kim og
-  // Anniken måtte svare på. Den køen er agentenes, ikke deres. Setningen sier
-  // nå bare det vi faktisk vet.
-  it("nevner natten først, og køen som en tilstand", () => {
+  // «Venter på et ja eller nei» stod i leden fram til 17.09 og telte
+  // agentenes arbeidskø. Nå er den lov — men bare fordi `koer` faktisk
+  // teller eiernes køer. Disse testene holder den koblingen ærlig.
+  it("sier fra om det som venter på et menneske, først", () => {
+    const v = venter([{ antall: 22, eldste: "2026-09-12T06:00:00Z" }], NAA)
     const k = koen([koeRad("a", "2026-09-12T06:00:00Z")], NAA)
     const natt = nattensFunn(
       [funn("f", "agent-anakinbot", "2026-09-16T03:00:00Z")],
       NAA,
     )
-    expect(lede(k, natt)).toBe(
-      "Agentene la fra seg 1 funn i natt. 1 oppdrag står i kø.",
+    expect(lede(v, k, natt)).toBe(
+      "22 ting venter på et ja eller nei fra dere. Den eldste har ventet 4 dager.",
     )
   })
 
-  it("sier bare køen når natten var tom", () => {
+  it("påstår IKKE at noe venter på et menneske naar koer er tom", () => {
+    const k = koen([koeRad("a", "2026-09-12T06:00:00Z")], NAA)
+    const natt = nattensFunn(
+      [funn("f", "agent-anakinbot", "2026-09-16T03:00:00Z")],
+      NAA,
+    )
+    const tekst = lede(ingenVenter, k, natt)
+    expect(tekst).toBe(
+      "Ingenting venter på dere. Agentene la fra seg 1 funn i natt. 1 oppdrag står i kø.",
+    )
+    expect(tekst).not.toMatch(/ja eller nei/i)
+  })
+
+  it("nevner agentkøen som en tilstand naar natten var tom", () => {
     const k = koen(
       [
         koeRad("a", "2026-09-12T06:00:00Z"),
@@ -188,18 +228,13 @@ describe("lede", () => {
       ],
       NAA,
     )
-    expect(lede(k, tomNatt)).toBe("3 oppdrag står i kø hos agentene.")
+    expect(lede(ingenVenter, k, tomNatt)).toBe(
+      "Ingenting venter på dere. 3 oppdrag står i kø hos agentene.",
+    )
   })
 
-  it("påstår aldri at et menneske må svare på agentkøen", () => {
-    const k = koen([koeRad("a", "2026-09-12T06:00:00Z")], NAA)
-    const tekst = lede(k, tomNatt)
-    expect(tekst).not.toMatch(/venter på et ja eller nei/i)
-    expect(tekst).not.toMatch(/dere/i)
-  })
-
-  it("sier det som det er når begge er tomme", () => {
-    expect(lede(koen([], NAA), tomNatt)).toBe(
+  it("sier det som det er når alt er tomt", () => {
+    expect(lede(ingenVenter, koen([], NAA), tomNatt)).toBe(
       "Stille natt, og ingenting i kø.",
     )
   })
