@@ -178,6 +178,10 @@
   color: var(--ny-varsel);
 }
 
+.ny-svar .varsel {
+  color: var(--ny-varsel);
+}
+
 /* Tomt/feil skal se tomt/feil ut — aldri et nulltall som ligner et svar. */
 .ny-stille {
   font-size: 14.5px;
@@ -224,7 +228,8 @@
 }
 
 .ny-detaljer.opp {
-  max-height: 420px;
+  /* Kortlista og raadene kan bli lengre enn koeen; klippes de, ser det ut som en feil. */
+  max-height: 960px;
 }
 
 .ny-detaljer ul {
@@ -260,6 +265,19 @@
 .ny-detaljer .t b {
   font-weight: 500;
   color: var(--ny-tekst);
+}
+
+/* Storyen et funn eller et kort hoerer til — liten, dempet, foran teksten. */
+.ny-detaljer .story {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--ny-dempet);
+  margin-right: 8px;
+  letter-spacing: 0.02em;
+}
+
+.ny-detaljer .t .varsel {
+  color: var(--ny-varsel);
 }
 
 /* ── knapper ────────────────────────────────────────────────── */

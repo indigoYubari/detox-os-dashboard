@@ -111,7 +111,40 @@ def main():
                                      data=json.dumps({"status": "superseded"}).encode(), headers={**hdr, "Prefer": "return=minimal"}, method="PATCH")
         try: urllib.request.urlopen(req, timeout=30)
         except urllib.error.HTTPError as e: print("supersede-feil", r["story"], e.code)
+    write_koe(url, key, hdr, rows)
     print("OK: sync ferdig")
+
+
+KOE_ID = "kim-kort"
+
+
+def write_koe(url: str, key: str, hdr: dict, rows: list) -> None:
+    """Kø-raden til forsiden (tabell koer, eiernes køer): utkast som venter på Indigo.
+
+    Én skriver per rad — denne synken eier «kim-kort». Forsiden summerer alle rader i
+    «Venter på dere» og viser denne som én linje; ingen dashbordkode trengs for det.
+    Statusen kommer fra topics/README.md i ICM, samme kilde som kortene selv.
+    """
+    utkast = sorted(r["story"] for r in rows if r["status"] == "draft")
+    eldste = None
+    try:
+        q = urllib.request.Request(f"{url}/rest/v1/kim_cards?status=eq.draft&select=created_at&order=created_at.asc&limit=1",
+                                   headers={"apikey": key, "Authorization": "Bearer " + key})
+        with urllib.request.urlopen(q, timeout=30) as r:
+            got = json.loads(r.read())
+            eldste = got[0]["created_at"] if got else None
+    except (urllib.error.HTTPError, OSError, ValueError, KeyError, IndexError):
+        eldste = None
+    koe = {"id": KOE_ID, "navn": "Kort til godkjenning", "antall": len(utkast), "eldste": eldste,
+           "detalj": (f"{len(utkast)} utkast venter på Indigo: " + ", ".join(utkast)) if utkast else "Ingen utkast venter. Alle kort er aktive.",
+           "kilde": "sync-kim-cards", "oppdatert": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    req = urllib.request.Request(f"{url}/rest/v1/koer?on_conflict=id", data=json.dumps(koe).encode(),
+                                 headers={**hdr, "Prefer": "resolution=merge-duplicates,return=minimal"}, method="POST")
+    try:
+        urllib.request.urlopen(req, timeout=30)
+        print(f"OK: koer/{KOE_ID} = {len(utkast)} utkast")
+    except urllib.error.HTTPError as e:
+        print(f"koer-feil HTTP {e.code}: {e.read().decode()[:200]}")
 
 
 if __name__ == "__main__":

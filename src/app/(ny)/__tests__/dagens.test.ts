@@ -3,13 +3,25 @@ import { describe, expect, it } from "vitest"
 import type { FindingRow } from "@/lib/radar"
 import type { RequestRow } from "@/lib/eiere"
 
+import type { KortRad } from "@/lib/kunnskap-server"
+import type { RaadRad } from "@/lib/raad-server"
+import type { RunStateRad } from "@/lib/system-server"
+
 import {
   datoKort,
   datoLang,
+  koeFersk,
+  kortStatus,
+  kortUtdrag,
   kr,
   koen,
   lede,
   nattensFunn,
+  raadAlvor,
+  raadKanal,
+  raadTittel,
+  raadTopp,
+  systemStatus,
   tall,
   varighet,
   venter,
@@ -237,5 +249,174 @@ describe("lede", () => {
     expect(lede(ingenVenter, koen([], NAA), tomNatt)).toBe(
       "Stille natt, og ingenting i kø.",
     )
+  })
+})
+
+// ── Annonse-raadene ─────────────────────────────────────────────────────────
+
+function raad(
+  id: string,
+  kind: string,
+  created_at: string,
+  reportType = "ads-funn:google-ads",
+  action = `Et råd [ad-agent #${id}]`,
+): RaadRad {
+  return {
+    id,
+    kind,
+    action,
+    status: "pending",
+    owner: "anniken",
+    created_at,
+    report: {
+      id: `r-${id}`,
+      agent_id: "agent-ads",
+      report_type: reportType,
+      period: "2026-09-17",
+      created_at,
+    },
+  }
+}
+
+describe("annonse-raad", () => {
+  it("leser alvoret bakerst i kind, og faller til info", () => {
+    expect(raadAlvor("ads.update_suppression_list.warning")).toBe("warning")
+    expect(raadAlvor("ads.budget.critical")).toBe("critical")
+    expect(raadAlvor("ads.insufficient_data.info")).toBe("info")
+    expect(raadAlvor("ads.noe_rart")).toBe("info")
+  })
+
+  it("stryker sporingen bakerst i action, men ikke teksten", () => {
+    expect(raadTittel("Google Ads: 351 kunder bør ekskluderes [ad-agent #1429]")).toBe(
+      "Google Ads: 351 kunder bør ekskluderes",
+    )
+    expect(raadTittel("Uten sporing")).toBe("Uten sporing")
+  })
+
+  it("henter kanalen fra report_type", () => {
+    expect(raadKanal("ads-funn:google-ads")).toBe("Google")
+    expect(raadKanal("ads-funn:klaviyo")).toBe("Klaviyo")
+    expect(raadKanal("ads-funn:ukjent-kanal")).toBe("ukjent-kanal")
+    expect(raadKanal(null)).toBe("Annonser")
+  })
+
+  it("rangerer alvorligst foerst, deretter nyest, og kutter til tre", () => {
+    const rows = [
+      raad("1", "ads.a.info", "2026-09-17T10:00:00Z"),
+      raad("2", "ads.b.warning", "2026-09-15T10:00:00Z"),
+      raad("3", "ads.c.warning", "2026-09-16T10:00:00Z", "ads-funn:klaviyo"),
+      raad("4", "ads.d.critical", "2026-09-10T10:00:00Z"),
+      raad("5", "ads.e.info", "2026-09-17T11:00:00Z"),
+    ]
+    const topp = raadTopp(rows)
+    expect(topp.map((r) => r.id)).toEqual(["4", "3", "2"])
+    expect(topp[1].kanal).toBe("Klaviyo")
+    expect(topp[0].tittel).toBe("Et råd")
+  })
+
+  it("gir tom liste uten rader", () => {
+    expect(raadTopp([])).toEqual([])
+  })
+})
+
+// ── Kortene ─────────────────────────────────────────────────────────────────
+
+function kort(
+  id: string,
+  story: string,
+  status: string,
+  updated_at: string,
+  body: unknown = { betydning_for_detox: "Vi selger produktet. Dataene sier lite." },
+): KortRad {
+  return {
+    id,
+    story,
+    version: "2026-09-09",
+    title: `Kort ${id}`,
+    status,
+    requires_review: status !== "active",
+    updated_at,
+    body,
+  }
+}
+
+describe("kortene", () => {
+  it("teller aktive og utkast, og skjuler superseded", () => {
+    const s = kortStatus([
+      kort("a", "berberine-glucose", "active", "2026-09-16T10:00:00Z"),
+      kort("b", "magnesium-sleep", "draft", "2026-09-17T10:00:00Z"),
+      kort("c", "magnesium-sleep", "superseded", "2026-09-01T10:00:00Z"),
+      kort("d", "creatine", "draft", "2026-09-15T10:00:00Z"),
+    ])
+    expect(s.aktive).toBe(1)
+    expect(s.utkast).toBe(2)
+    expect(s.kort.map((k) => k.id)).toEqual(["a", "b", "d"])
+    expect(s.nyeste).toBe("2026-09-17T10:00:00Z")
+  })
+
+  it("trekker ut betydningen kort, og taaler kort uten kropp", () => {
+    expect(kortUtdrag({ betydning_for_detox: "  En   setning.  " })).toBe("En setning.")
+    expect(kortUtdrag({ betydning_for_detox: "x".repeat(200) }, 20)).toHaveLength(20)
+    expect(kortUtdrag(null)).toBe("")
+    expect(kortUtdrag({ kan_si: {} })).toBe("")
+    expect(kortStatus([]).kort).toEqual([])
+    expect(kortStatus([]).nyeste).toBeNull()
+  })
+})
+
+// ── Systemet ────────────────────────────────────────────────────────────────
+
+function kjoering(
+  agent_id: string,
+  last_successful_run: string | null,
+  last_run_status = "ok",
+  last_error: string | null = null,
+): RunStateRad {
+  return {
+    agent_id,
+    last_successful_run,
+    last_run_status,
+    last_error,
+    updated_at: last_successful_run ?? "2026-09-16T00:00:00Z",
+  }
+}
+
+describe("systemet", () => {
+  it("er stille naar alle har kjoert siste doegn", () => {
+    const s = systemStatus(
+      [
+        kjoering("agent-indigobot", "2026-09-16T05:30:00Z"),
+        kjoering("agent-ads", "2026-09-15T14:25:00Z"),
+      ],
+      NAA,
+    )
+    expect(s.stille).toEqual([])
+    expect(s.linjer.map((l) => l.navn)).toEqual(["IndigoBot", "Annonsemotoren"])
+    expect(s.linjer[1].alder).toBe("15 timer")
+  })
+
+  it("navngir den som ikke har kjoert, eller kjoerte med feil", () => {
+    const s = systemStatus(
+      [
+        kjoering("agent-anakinbot", "2026-09-13T05:30:00Z"),
+        kjoering("agent-ads", "2026-09-16T04:10:00Z", "error", "HTTP 502"),
+        kjoering("agent-ukjent", null),
+      ],
+      NAA,
+    )
+    expect(s.stille).toEqual(["Anakin", "Annonsemotoren", "agent-ukjent"])
+    expect(s.linjer[1].feil).toBe("HTTP 502")
+    expect(s.linjer[2].alder).toBeNull()
+  })
+})
+
+// ── Kundeservice ────────────────────────────────────────────────────────────
+
+describe("koeFersk", () => {
+  it("regner et pass under 30 timer gammelt som dagens", () => {
+    expect(koeFersk("2026-09-16T03:10:00Z", NAA)).toBe(true)
+    expect(koeFersk("2026-09-14T03:10:00Z", NAA)).toBe(false)
+    expect(koeFersk(null, NAA)).toBe(false)
+    expect(koeFersk("ikke en dato", NAA)).toBe(false)
   })
 })
