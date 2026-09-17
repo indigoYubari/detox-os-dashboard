@@ -213,6 +213,81 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "502":
           description: Annonsemotoren er utilgjengelig. Ingen mock-fallback.
+
+  /api/v1/cards:
+    get:
+      operationId: listCards
+      summary: Hva står i Kim-kortene? Hva kan vi si om et tema?
+      description: >
+        Indigos Kim-kort per research-story: hva det betyr for Detox, hva vi
+        kan si (portal/reels/mail), hva vi aldri sier, produkt, hva du gjør i
+        dag, når kortet dør, kilder. Kortet er et markedsføringsmessig
+        rammeverk, ikke helseråd. GPT-en ser kun kort med status active - et
+        draft er aldri tilgjengelig her, og skal aldri omtales som godkjent.
+        Krever scope detox:read.
+      parameters:
+        - name: story
+          in: query
+          required: false
+          description: Én story-slug, f.eks. berberine-glucose. Utelat for alle.
+          schema: { type: string, pattern: "^[a-z0-9-]{1,64}$" }
+      responses:
+        "200":
+          description: Kortene med ferskhetsmetadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data_source: { type: string, enum: [live] }
+                  source: { type: string }
+                  visibility: { type: string, enum: [active_only, all] }
+                  updated_latest: { type: [string, "null"], format: date-time }
+                  counts:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      by_story: { type: object, additionalProperties: { type: integer } }
+                  cards:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        story: { type: string }
+                        version: { type: string, format: date }
+                        title: { type: string }
+                        status: { type: string, enum: [draft, active] }
+                        requires_review: { type: boolean }
+                        body:
+                          type: object
+                          properties:
+                            betydning_for_detox: { type: string }
+                            kan_si:
+                              type: object
+                              properties:
+                                portal: { type: string }
+                                reels: { type: string }
+                                mail: { type: string }
+                            aldri_si: { type: array, items: { type: string } }
+                            produkt: { type: string }
+                            gjor_i_dag: { type: string }
+                            dor_naar: { type: string }
+                            kilde: { type: array, items: { type: string } }
+                        anchors:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              type: { type: string, enum: [pmid, pmc, doi, nct] }
+                              id: { type: string }
+                        updated_at: { type: string, format: date-time }
+                  caveat: { type: string }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: Kortene er ikke koblet til (migrasjon 0010 ikke kjørt) eller basen svarer ikke. Ingen mock-fallback.
           content:
             application/json:
               schema:
