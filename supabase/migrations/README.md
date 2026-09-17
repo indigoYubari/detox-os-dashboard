@@ -16,6 +16,7 @@ Kjøring (inntil CLI-flyt er satt opp): Supabase SQL Editor på prosjektet
 | 0006_authenticated_least_privilege.sql | Fjerner DELETE/TRUNCATE fra `authenticated` på alle tabeller; grants utledet fra faktisk kodebruk | KJØRT i prod 2026-08-22 |
 | 0007_content_items.sql | Ny tabell `content_items` — vedvarende state for content-workflowen i detox-vault. RLS på, lesing for `authenticated`, skriving kun for `detox_role` admin/founder/operator, ingen grants til anon, ingen DELETE-grant | KJØRT i prod 2026-08-23 |
 | 0008_shared_state_owner_access.sql | Eier-oversikt (/eiere): SELECT for `authenticated` på `reports`, `findings`, `recommendations`, `run_state`; SELECT/INSERT/UPDATE på `requests` med skriving gated på `detox_role` admin/founder/operator. Kun grants + policyer, ingen kolonner. Rollback nederst i fila | KJØRT i prod 2026-09-08 (Management API, godkjent av Adrian i chat). Verifisert: 7 policyer, `authenticated` SELECT på fire lesetabeller + INSERT/SELECT/UPDATE på `requests`, anon ingen, `activity_events` bit-identisk før/etter |
+| 0009_koer.sql | Ny tabell `koer` — eiernes faktiske køer (stemme-utkast, kundeservice). RLS, `authenticated` kun SELECT, `anon` ingenting. | KJØRT i prod 2026-09-17 14:07Z via Management API (Claude Code, Adrians godkjenning i MASTER-CC §4.2) |
 
 Etter kjøring: oppdater status-kolonnen her + CURRENT_STATE i detox-os-architecture,
 og verifiser med det nektede anon-kallet beskrevet i 0002.
@@ -57,3 +58,22 @@ tabellene fra før.
 
 Ingen påvirkning på eksisterende data: md5-fingerprint av alle grants (190) og policyer
 (17) for de øvrige tabellene var identisk før og etter, og alle radtall var uendret.
+
+## 0009 — verifisering 2026-09-17
+
+Kjørt via Management API mot `kwrjhyytvbcaiszbfria` kl. 14:07Z. Additiv: kun `public.koer`.
+
+- `select count(*) from public.koer` → 0 rett etter apply
+- `has_table_privilege('anon','public.koer','select')` → false · `authenticated` SELECT → true
+- `relrowsecurity = true`, én policy `koer owner read` (SELECT, authenticated)
+- md5-fingerprint av alle andre tabellers grants (338 rader) identisk før og etter
+
+**Tillegg samme dag:** Supabase' `ALTER DEFAULT PRIVILEGES` ga `authenticated` INSERT/UPDATE/DELETE/TRUNCATE
+på den nye tabellen (RLS uten skrivepolicy blokkerte uansett, men grantet lå der). Kjørt:
+`revoke insert, update, delete, truncate on public.koer from authenticated;` → alle fire false etterpå.
+Samme situasjon gjelder trolig `content_items` (se 0007-notatet) — ikke rørt her.
+
+Skrivere: `/root/detox-os-verify/koe_projeksjon.py` (stemme-utkast, timer `koe-projeksjon.timer` hver
+halvtime :20/:50) og Raphaels `kundeservice-natt` (rad `kundeservice`, via `detox_update`/`detox_insert`
+i supabase-detox — lagt til 17.09). Første `kundeservice`-rad er en engangs-projeksjon av passet 17.09
+03:10Z, merket `claude-code` i `kilde`.
