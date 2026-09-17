@@ -78,27 +78,27 @@ export default async function DagensSide() {
 
       <EpostISeg />
 
-      <Seksjon merkelapp="Venter på dere">
+      <Seksjon merkelapp="Agentkøen">
         {koeFeil ? (
           <Stille>
             <span className="varsel">Fikk ikke lest køen.</span> {koeFeil}
           </Stille>
         ) : koe.antall === 0 ? (
-          <Svar>Ingenting venter</Svar>
+          <Svar>Ingenting står åpent</Svar>
         ) : (
           <>
             <Svar>
-              <strong>{koe.antall}</strong> forslag fra agentene
+              <strong>{koe.antall}</strong> oppdrag står åpne
             </Svar>
             <Hjelp>
               {koe.eldsteAlder
-                ? `Eldste har ventet ${koe.eldsteAlder}. `
+                ? `Eldste har ligget ${koe.eldsteAlder}. `
                 : ""}
-              Alt er skrevet, ingenting er sendt.
+              Bestillinger til agentene — ingenting dere må svare på.
             </Hjelp>
             <Knapper>
-              <Link className="ny-knapp primaer" href="/eiere">
-                Gå gjennom køen
+              <Link className="ny-knapp" href="/eiere">
+                Åpne eiersiden
               </Link>
             </Knapper>
           </>

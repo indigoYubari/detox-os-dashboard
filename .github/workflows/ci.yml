@@ -1,0 +1,44 @@
+name: CI
+
+# Kjører typesjekk, tester og produksjonsbygg på hver PR og på main.
+#
+# Hvorfor: prosjektet har 281 tester og ingen kjørte dem. Feilene vi faktisk har
+# hatt — en stille mock-fallback, et felt som sluttet å oppdatere seg, en
+# rot-layout som brakk /login — ble alle oppdaget av et menneske, uker senere,
+# ved å se på en side. Denne workflowen fanger dem i stedet på under et minutt.
+#
+# Bygget trenger NEXT_PUBLIC_SUPABASE_* fordi /login forhåndsrendres og
+# @supabase/ssr kaster uten dem. Attrapverdiene under er nettopp det: attrap.
+# De når aldri et bygg som deployes — Railway har de ekte.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: tsc + test + bygg
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Installer
+        run: npm ci --no-audit --no-fund
+
+      - name: Typesjekk
+        run: npx tsc --noEmit
+
+      - name: Tester
+        run: npx vitest run
+
+      - name: Bygg
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
