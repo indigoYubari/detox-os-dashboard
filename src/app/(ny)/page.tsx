@@ -4,8 +4,10 @@ import { fetchQueue } from "@/lib/eiere-server"
 import { DEFAULT_FILTERS, type FindingRow } from "@/lib/radar"
 import { fetchFindings } from "@/lib/radar-server"
 
+import { AnnonserISeg } from "./AnnonserISeg"
 import { ButikkISeg } from "./ButikkISeg"
 import { Detaljer } from "./Detaljer"
+import { EpostISeg } from "./EpostISeg"
 import { KundeserviceISeg } from "./KundeserviceISeg"
 import { Hjelp, Knapper, Linje, Liste, Seksjon, Stille, Svar } from "./Seksjon"
 import { datoLang, koen, lede, nattensFunn, varighet, type Koen, type NattensFunn } from "./dagens"
@@ -71,6 +73,10 @@ export default async function DagensSide() {
       </div>
 
       <ButikkISeg />
+
+      <AnnonserISeg />
+
+      <EpostISeg />
 
       <Seksjon merkelapp="Venter på dere">
         {koeFeil ? (
