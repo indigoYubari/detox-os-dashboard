@@ -1,0 +1,87 @@
+{
+  "run_id": "seed-2026-09-19",
+  "beskrivelse": "Seed v1 for sok_rangering og sok_ai_sitering (migrasjon 0012): det Detox følger med på. Bygget 19.09 av Claude Code fra de tre kildene Adrian godkjente 18.09 (beslutning 4). Ingen kunde-ID, ingen meldingstekst, ingen sitat, ingen e-post. Temaene er skrevet av mennesker; søk, spørsmål og svar-mønstre er formulert med egne ord.",
+  "grunnlag": [
+    {
+      "kilde": "aggregerte temaer",
+      "fra": "mindmatter-icm: detox/anakin/KUNDESERVICE-SPORSMAAL-2026-09-16.md",
+      "hva": "AnakinBots utvalg på 140 innkommende meldinger til kontakt@ (15.05–16.09): emner og tre registre. Ikke fulltelling av de 13 079 i innboksen."
+    },
+    {
+      "kilde": "mest spurte spørsmål",
+      "fra": "tellingene i samme utvalg",
+      "hva": "Konsultasjon eller time 23 av 114 direkte henvendelser, veiledning 3, protokoll for kosttilskudd 3, Paratox og Binder 2. Rangeringen gjelder utvalget, ikke hele innboksen."
+    },
+    {
+      "kilde": "hvordan Detox svarer",
+      "fra": "mindmatter-icm: detox/_shared/kundeservice/KUNDESVAR-KORPUS-RAA-2026-09-15.md",
+      "hva": "Mønstre fra 69 sendte svar (120 dager), beskrevet med egne ord. Ingen setninger er kopiert."
+    }
+  ],
+  "utelatt": [
+    {"tema": "alvorlig sykdom", "grunn": "Register menneskelig (P0). Går alltid til et menneske og blir aldri SEO-sporing eller innhold."},
+    {"tema": "diagnoser (ADHD, histaminintoleranse, rosacea)", "grunn": "Tilstander. Krever claims-vurdering, og kanskje Raphaels kundesvar-domene (modus 7), før de spores. Flagget, ikke gjettet."},
+    {"tema": "tillit og sinne", "grunn": "Ønske om et ekte menneske og sinte henvendelser er tillitssignaler, ikke søk."},
+    {"tema": "samarbeid, UGC og videresalg", "grunn": "Forretningshenvendelser. Egen kanal."},
+    {"tema": "ordre, frakt, adresse, retur og lagerstatus", "grunn": "Praktisk service. Ikke søkeetterspørsel."}
+  ],
+  "neste": "Tirsdag 22.09: DataForSEO (autocomplete, People also ask) og GSC-queries utvider lista mot ca. 100 søk. En ny versjon får ny run_id (seed-ÅÅÅÅ-MM-DD). Denne blir stående som den er.",
+  "rangering": [
+    {"query": "funksjonell medisin konsultasjon", "tema": "konsultasjon", "register": "praktisk"},
+    {"query": "behandler funksjonell medisin", "tema": "konsultasjon", "register": "praktisk"},
+    {"query": "detox protokoll kosttilskudd", "tema": "kosttilskudd-protokoll", "register": "faglig"},
+    {"query": "rekkefølge kosttilskudd detox", "tema": "kosttilskudd-protokoll", "register": "faglig"},
+    {"query": "paratox", "tema": "paratox-binder", "register": "faglig"},
+    {"query": "detox binder", "tema": "paratox-binder", "register": "faglig"},
+    {"query": "binder dosering", "tema": "paratox-binder", "register": "faglig"},
+    {"query": "paratox og binder", "tema": "paratox-binder", "register": "faglig"},
+    {"query": "leverrens", "tema": "leverrens", "register": "faglig"},
+    {"query": "tudca", "tema": "leverrens", "register": "faglig"},
+    {"query": "parasittrens", "tema": "parasittrens", "register": "faglig"},
+    {"query": "parasittkur", "tema": "parasittrens", "register": "faglig"},
+    {"query": "kollagen kosttilskudd", "tema": "kollagen", "register": "faglig"},
+    {"query": "rense lungene", "tema": "rense-lungene", "register": "faglig"},
+    {"query": "kosttilskudd og medisiner", "tema": "medisiner", "register": "faglig"},
+    {"query": "glutathion", "tema": "glutathion", "register": "faglig"},
+    {"query": "blålysbriller", "tema": "blaalysbriller", "register": "faglig"},
+    {"query": "detox.no rabattkode", "tema": "rabatt", "register": "praktisk"}
+  ],
+  "ai_sitering": [
+    {
+      "sporsmal": "Hvor kan jeg få time hos en behandler innen funksjonell medisin i Norge?",
+      "tema": "konsultasjon",
+      "register": "praktisk",
+      "detox_svar": "Fast og ærlig kapasitetssvar: Detox tar ikke inn nye klienter nå. Anbefaler en behandler som kan følge opp over tid, og viser til offisielle behandleroversikter der de finnes. Ingen salg i svaret."
+    },
+    {
+      "sporsmal": "Hvordan doserer man en binder under en detox, og når bør den tas?",
+      "tema": "paratox-binder",
+      "register": "faglig",
+      "detox_svar": "Svar først: dose i et glass vann og når den tas, med avstand til mat og kosttilskudd og lengre avstand til medisiner. Én setning om hvorfor: binderen kan også ta opp næringsstoffer og legemidler. Fast avgrensning ved faste medisiner, graviditet eller kjent sykdom."
+    },
+    {
+      "sporsmal": "I hvilken rekkefølge bør man starte med leverstøtte, parasittrens og binder?",
+      "tema": "kosttilskudd-protokoll",
+      "register": "faglig",
+      "detox_svar": "Rekkefølge med begrunnelse: leverstøtte først, parasittproduktet når formen er stabil, binderen på avstand fra de andre og med ekstra avstand etter parasittproduktet. Fast avgrensning til slutt."
+    },
+    {
+      "sporsmal": "Kan man ta Paratox og Detox Binder samme dag?",
+      "tema": "paratox-binder",
+      "register": "faglig",
+      "detox_svar": "Ja, men ikke samtidig: binderen tas en stund etter parasittproduktet, og avstanden oppgis konkret. Ingen effektløfter."
+    },
+    {
+      "sporsmal": "Finnes det kosttilskudd som renser lungene for partikler?",
+      "tema": "rense-lungene",
+      "register": "faglig",
+      "detox_svar": "Ærlig nei: det finnes ikke dokumentasjon for at et kosttilskudd fjerner partikler som har satt seg i lungene. Viktigst er å redusere videre eksponering. Advarer mot produkter som lover å rense lungene."
+    },
+    {
+      "sporsmal": "Kan jeg ta kosttilskudd når jeg bruker reseptbelagte medisiner?",
+      "tema": "medisiner",
+      "register": "faglig",
+      "detox_svar": "Avklar med legen som forskrev medisinen før du kombinerer. Binder alltid på god avstand fra medisiner. Ved sammensatte tilstander anbefales medisinsk oppfølging, og Detox bidrar med produkter og informasjon underveis."
+    }
+  ]
+}
