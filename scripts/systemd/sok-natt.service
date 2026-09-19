@@ -1,0 +1,13 @@
+# Installeres på huben som /etc/systemd/system/sok-natt.service (Orion, eller
+# Claude Code etter Adrians ja). Mønster: koe-projeksjon.service.
+[Unit]
+Description=sok-natt — Detox søke- og AI-synlighet til sok_rangering/sok_ai_sitering (migrasjon 0012)
+Documentation=file:/opt/detox/tools/sok-natt.py
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Skriptet leser nøklene selv fra /root/.env.secrets (bare navnene det trenger).
+ExecStart=/usr/bin/python3 /opt/detox/tools/sok-natt.py
+Nice=10

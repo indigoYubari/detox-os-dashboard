@@ -19,6 +19,7 @@ Kjøring (inntil CLI-flyt er satt opp): Supabase SQL Editor på prosjektet
 | 0009_koer.sql | Ny tabell `koer` — eiernes faktiske køer (stemme-utkast, kundeservice). RLS, `authenticated` kun SELECT, `anon` ingenting. | KJØRT i prod 2026-09-17 14:07Z via Management API (Claude Code, Adrians godkjenning i MASTER-CC §4.2) |
 | 0010_kim_cards.sql | Ny tabell `kim_cards` + view `v_kim_cards` (Indigos Kim-kort). RLS: `authenticated` SELECT; maskinprinsipal (`detox_role=service`) ser kun `active`. Skriver: `scripts/sync-kim-cards.py` (service_role). | KJØRT i prod 2026-09-17 ~15:00Z via Management API (Claude Code, Adrians ja i chat). Default-grants til `authenticated` revoked etterpå (som 0009). 10 kort synket samme dag |
 | 0011_koe_poster.sql | Ny tabell `koe_poster` — postene bak `koer` og eiernes avgjørelse (ja/nei/gjort). Hub-jobber skriver (service_role), eierne oppdaterer kun status/avgjort_* (kolonne-grant + policy på admin/founder/operator), hub-jobbene utfører og kvitterer. Del 2: default privileges for rollen postgres i public — nye tabeller får kun SELECT for `authenticated`, ingenting for `anon`. Leftover REFERENCES/TRIGGER på `koer` revoked | KJØRT i prod 2026-09-17 ~19:47Z via Management API (Claude Code, Adrians ja i chat). Verifisert: `authenticated` har SELECT + UPDATE på nøyaktig status/avgjort_av/avgjort_at/oppdatert, ingen INSERT/DELETE, `anon` ingenting; default-ACL for postgres i public er nå `authenticated=r`. 9 kort-poster skrevet samme kveld |
+| 0012_sok.sql | To nye tabeller for søke- og AI-synlighet: `sok_rangering` (GSC/Bing/DataForSEO + seed-søk) og `sok_ai_sitering` (AI-motorer + seed-spørsmål med hvordan Detox svarer). `data_mode` seed/live, `synced_at`, fryst `run_id` (CHECK), unik nøkkel per kjøring (`nulls not distinct`). RLS som koer: `authenticated` kun SELECT, `anon` ingenting, skriver = `sok-natt` (service_role) | KJØRT i prod 2026-09-19 16:23Z via Management API (Claude Code, Adrians ja 19.09 18:03, Grok BOARD A25). Bevist i rollback-transaksjon mot prod først (8 prøver). Verifisert: RLS på, `anon` alt false, `authenticated` kun SELECT, fingerprint av alle andre tabeller identisk. Seed v1 skrevet samme kveld: 18 søk + 6 spørsmål |
 
 Etter kjøring: oppdater status-kolonnen her + CURRENT_STATE i detox-os-architecture,
 og verifiser med det nektede anon-kallet beskrevet i 0002.
@@ -79,3 +80,33 @@ Skrivere: `/root/detox-os-verify/koe_projeksjon.py` (stemme-utkast, timer `koe-p
 halvtime :20/:50) og Raphaels `kundeservice-natt` (rad `kundeservice`, via `detox_update`/`detox_insert`
 i supabase-detox — lagt til 17.09). Første `kundeservice`-rad er en engangs-projeksjon av passet 17.09
 03:10Z, merket `claude-code` i `kilde`.
+
+## 0012 — verifisering 2026-09-19
+
+Kjørt via Management API mot `kwrjhyytvbcaiszbfria` kl. 16:23Z med Detox-kontoens PAT
+(`~/.supabase-detox-token` på Adrians maskin). Hub-tokenet `SUPABASE_ACCESS_TOKEN` er MindMatter-scopet
+og gir HTTP 403 mot dette prosjektet — bruk ikke det.
+
+**Før apply:** hele fila kjørt i `begin … rollback` mot prod, 8 prøver (samme teknikk som 0008):
+
+- `authenticated` leser (0 rader) · `authenticated` INSERT → `42501` · `anon` SELECT → `42501`
+- `service_role` skriver en seed-rad og upserter på den unike nøkkelen (`nulls not distinct`) → 1 rad, oppdatert
+- CHECK: seed med måletall, `kundeservice` som måling, ugyldig `run_id`, AI-måling uten `sitert_detox` → alle `23514`
+- fingerprint etterpå identisk og `sok_*` fantes ikke → ingenting ble lagret
+
+**Etter apply (SQL):**
+
+- `relrowsecurity = true` på begge
+- `anon`: SELECT/INSERT/UPDATE/DELETE/TRUNCATE og kolonnerettigheter → false
+- `authenticated`: SELECT → true. INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN og kolonneskriving → false
+- `service_role`: SELECT/INSERT/UPDATE → true. Én policy per tabell (`… read`, SELECT, authenticated)
+- md5-fingerprint av ACL/RLS (27 relasjoner), grants (412), kolonnegrants (2539), policyer (31) og default ACL (24)
+  for alle andre tabeller: identisk før og etter. Radtall i koer/koe_poster/kim_cards/content_items/findings uendret
+
+**Etter apply (REST, røyktest-kontoen):** `anon` GET på begge tabeller → 401 `42501`. Innlogget GET → 200
+(18 + 6 seed-rader). Innlogget POST og PATCH → 403 `42501`, også med `detox_role = admin`.
+
+**Skriver:** `scripts/sok-natt.py` → `/opt/detox/tools/sok-natt.py` på huben (service_role). Seed v1
+(`scripts/sok-seed-2026-09-19.json`, `run_id = seed-2026-09-19`): 18 søk + 6 spørsmål, PII-skann 0 treff, kjørt to
+ganger → fortsatt 18 + 6 (upsert). Negativ prøve: `sok-natt.py --status "binder dosering"` → `ukjent — ingen måling`
+på gsc/bing/dataforseo. Timer `sok-natt.timer` (04:40Z) ligger i `scripts/systemd/` og er ikke installert.

@@ -1,0 +1,13 @@
+# Installeres som /etc/systemd/system/sok-natt.timer, deretter:
+#   systemctl daemon-reload && systemctl enable --now sok-natt.timer
+[Unit]
+Description=sok-natt hver natt 04:40 UTC (etter post-ads-report 04:10, før stemme-laer 07:00)
+Documentation=file:/opt/detox/tools/sok-natt.py
+
+[Timer]
+OnCalendar=*-*-* 04:40:00
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
