@@ -1,13 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import Link from "next/link"
 
 import { ApiError, getInventory, getMetrics } from "@/lib/detox-api"
 import { butikkVindu, lesButikkTall, lesLagerTall, type ButikkTall, type LagerTall } from "@/lib/butikk"
 
 import { Detaljer } from "./Detaljer"
-import { Hjelp, Knapper, Linje, Liste, Seksjon, Stille, Svar } from "./Seksjon"
+import { Hjelp, Linje, Liste, Seksjon, Stille, Svar } from "./Seksjon"
 import { kr, tall } from "./dagens"
 
 type Tilstand =
@@ -119,11 +118,6 @@ export function ButikkISeg() {
           )}
         </Liste>
       </Detaljer>
-      <Knapper>
-        <Link className="ny-knapp" href="/butikk">
-          Se hele butikken
-        </Link>
-      </Knapper>
     </Seksjon>
   )
 }

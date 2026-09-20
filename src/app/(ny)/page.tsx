@@ -12,6 +12,7 @@ import { AnnonserISeg } from "./AnnonserISeg"
 import { ButikkISeg } from "./ButikkISeg"
 import { Detaljer } from "./Detaljer"
 import { EpostISeg } from "./EpostISeg"
+import { LønnsomhetISeg } from "./LønnsomhetISeg"
 import { Hjelp, Knapper, Linje, Liste, Seksjon, Stille, Svar } from "./Seksjon"
 import {
   datoLang,
@@ -208,6 +209,8 @@ export default async function DagensSide() {
 
       <ButikkISeg />
 
+      <LønnsomhetISeg />
+
       <AnnonserISeg raad={raad} raadFeil={raadFeil} />
 
       <EpostISeg />
@@ -285,11 +288,6 @@ export default async function DagensSide() {
                 : ""}
               Bestillinger til agentene — ingenting dere må svare på.
             </Hjelp>
-            <Knapper>
-              <Link className="ny-knapp" href="/eiere">
-                Åpne eiersiden
-              </Link>
-            </Knapper>
           </>
         )}
       </Seksjon>
@@ -332,11 +330,6 @@ export default async function DagensSide() {
                 })}
               </Liste>
             </Detaljer>
-            <Knapper>
-              <Link className="ny-knapp" href="/radar">
-                Åpne radar
-              </Link>
-            </Knapper>
           </>
         )}
       </Seksjon>

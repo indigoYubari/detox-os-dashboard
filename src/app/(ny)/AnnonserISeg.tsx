@@ -1,14 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import Link from "next/link"
 
 import { ApiError, getMetrics, type MetricsResponse } from "@/lib/detox-api"
 import { CHANNEL_LABELS, kr as adKr, pctLabel, roasLabel } from "@/lib/ad-format"
 
 import { Detaljer } from "./Detaljer"
 import { RaadBlokk } from "./Raad"
-import { Hjelp, Knapper, Linje, Liste, Seksjon, Stille, Svar } from "./Seksjon"
+import { Hjelp, Linje, Liste, Seksjon, Stille, Svar } from "./Seksjon"
 import { tall, type Raad } from "./dagens"
 
 /** Kanalene som faktisk koster penger. Shopify/Klaviyo er egne seksjoner. */
@@ -131,11 +130,6 @@ export function AnnonserISeg({
         </Liste>
       </Detaljer>
       <RaadBlokk raad={raad} feil={raadFeil} />
-      <Knapper>
-        <Link className="ny-knapp" href="/annonser">
-          Åpne annonser
-        </Link>
-      </Knapper>
     </Seksjon>
   )
 }
