@@ -10,18 +10,19 @@ import {
   type TrendResponse,
 } from "@/lib/detox-api"
 import { roasLabel, validatedRoas } from "@/lib/ad-format"
+import { LineChart } from "@/components/LineChart"
 
 import { Detaljer } from "./Detaljer"
 import { Hjelp, Linje, Liste, Seksjon, Stille, Svar } from "./Seksjon"
 import { kr } from "./dagens"
 
 /*
-  «Lønnsomheten» — det ene tallet The gamle /overview hadde oeverst og det nye
-  mangler: blended ROAS over alt betalt media. Verdi fra getMetrics' totals
-  (validatedRoas = Shopify-omsetning ÷ total annonsespend), aldri mock.
+  «Lønnsomheten» — det ene tallet det gamle /overview hadde oeverst: blended ROAS
+  over alt betalt media. Verdi fra getMetrics' totals (validatedRoas =
+  Shopify-omsetning ÷ total annonsespend), aldri mock.
 
-  Rullefeltet Va er en leseflate: ett svar, detaljer bak «Se …». ROAS-trenden
-  (getTrend) vises som tekstlinje fordi designet ikke bruker grafikk.
+  Under svaret ligger en ROAS-trend-graf (getTrend) — den samme serien det gamle
+  /overview-plotet, i den nye flatens stil. Mangler en kanal data, tegnes den ikke.
 */
 
 const DAGER = 30
@@ -40,32 +41,39 @@ function dagerSiden(n: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-/**
- * Teksttrend fra getTrend-serien: første verdi → siste verdi i vinduet, per kanal.
- * Returnerer null hvis det ikke er to målbare punkter (da sier vi ingenting i
- * stedet for å dikte en linje).
- */
-function trendLesning(trend: TrendResponse | null): string | null {
-  if (!trend || trend.series.length < 2) return null
-  const s = trend.series
-  const først = s[0]
-  const sist = s[s.length - 1]
-  const deler: string[] = []
-  for (const [nøkkel, navn] of [
-    ["google_ads_roas", "Google"],
-    ["klaviyo_roas", "Klaviyo"],
-  ] as const) {
-    const a = først[nøkkel]
-    const b = sist[nøkkel]
-    if (typeof a !== "number" || typeof b !== "number") continue
-    const diff = b - a
-    if (Math.abs(diff) < 0.05) {
-      deler.push(`${navn} uendret`)
-    } else {
-      deler.push(`${navn} ${diff > 0 ? "+" : "−"}${Math.abs(diff).toFixed(2)}x`)
-    }
+type GrafPunkt = {
+  date: string
+  Google: number | null
+  Klaviyo: number | null
+}
+
+/** Serien fra getTrend, omformet til grafen. Bare kanaler med data slippes inn. */
+function trendGraf(
+  trend: TrendResponse | null,
+): { data: GrafPunkt[]; categories: ("Google" | "Klaviyo")[] } {
+  if (!trend || trend.series.length === 0) {
+    return { data: [], categories: [] }
   }
-  return deler.length > 0 ? deler.join(" · ") : null
+  const data: GrafPunkt[] = trend.series.map((pt) => ({
+    date: String(pt.date ?? "").slice(5),
+    Google:
+      typeof pt.google_ads_roas === "number"
+        ? +pt.google_ads_roas.toFixed(2)
+        : null,
+    Klaviyo:
+      typeof pt.klaviyo_roas === "number"
+        ? +pt.klaviyo_roas.toFixed(2)
+        : null,
+  }))
+  const categories: ("Google" | "Klaviyo")[] = []
+  if (data.some((d) => d.Google != null)) categories.push("Google")
+  if (data.some((d) => d.Klaviyo != null)) categories.push("Klaviyo")
+  return { data, categories }
+}
+
+const GRAF_FARGE: Record<string, "blue" | "amber"> = {
+  Google: "blue",
+  Klaviyo: "amber",
 }
 
 export function LønnsomhetISeg() {
@@ -132,7 +140,7 @@ export function LønnsomhetISeg() {
   const spend = m.totals.adSpend
   const blended = validatedRoas(spend, omsetning)
   const kanaler = m.channels.filter((c) => BETALTE.includes(c.channel))
-  const trendTekst = trendLesning(trend)
+  const { data: graf, categories } = trendGraf(trend)
 
   return (
     <Seksjon merkelapp="Lønnsomheten">
@@ -141,9 +149,24 @@ export function LønnsomhetISeg() {
       </Svar>
       <Hjelp>
         {kr(omsetning)} i omsetning mot {kr(spend)} i annonser over siste{" "}
-        {DAGER} dager.{" "}
-        {trendTekst ? `ROAS-trenden: ${trendTekst}.` : ""}
+        {DAGER} dager.
       </Hjelp>
+
+      {graf.length > 1 && categories.length > 0 ? (
+        <LineChart
+          data={graf}
+          index="date"
+          categories={categories}
+          colors={categories.map((c) => GRAF_FARGE[c])}
+          valueFormatter={(v) => `${v.toFixed(2)}x`}
+          showTooltip={false}
+          connectNulls
+          className="mt-4 h-52"
+        />
+      ) : (
+        <Hjelp>For lite data for en trend akkurat nå.</Hjelp>
+      )}
+
       <Detaljer tekst="Se per kanal">
         <Liste>
           {kanaler.map((c) => (
