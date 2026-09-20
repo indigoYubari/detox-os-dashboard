@@ -1,10 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import Link from "next/link"
 
 import { Detaljer } from "./Detaljer"
-import { Hjelp, Knapper, Linje, Liste, Seksjon, Stille, Svar } from "./Seksjon"
+import { Hjelp, Linje, Liste, Seksjon, Stille, Svar } from "./Seksjon"
 import { kr, tall } from "./dagens"
 
 type Klaviyo = {
@@ -107,11 +106,6 @@ export function EpostISeg() {
           <Linje n="liste">{listeTekst}</Linje>
         </Liste>
       </Detaljer>
-      <Knapper>
-        <Link className="ny-knapp" href="/annonser">
-          Se kampanjer
-        </Link>
-      </Knapper>
     </Seksjon>
   )
 }
