@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 
 import { Detaljer } from "./Detaljer"
-import { Hjelp, Linje, Liste, Seksjon, Stille, Svar } from "./Seksjon"
+import { Hjelp, Knapper, Linje, Liste, Seksjon, Stille, Svar } from "./Seksjon"
 import { kr, tall } from "./dagens"
 
 type Klaviyo = {
@@ -106,6 +106,16 @@ export function EpostISeg() {
           <Linje n="liste">{listeTekst}</Linje>
         </Liste>
       </Detaljer>
+      <Knapper>
+        <a
+          className="ny-knapp"
+          href="https://a.klaviyo.com"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Åpne Klaviyo
+        </a>
+      </Knapper>
     </Seksjon>
   )
 }

@@ -19,6 +19,7 @@ import {
   koeFersk,
   koen,
   kortStatus,
+  klipp,
   lede,
   nattensFunn,
   raadTopp,
@@ -300,14 +301,25 @@ export default async function DagensSide() {
         ) : natt.funn.length === 0 ? (
           <Svar>Ingen funn i natt</Svar>
         ) : (
+          <Svar>
+            {(() => {
+              const topp = natt.funn[0]
+              const story = storyOf(topp.report.report_type)
+              return (
+                <>
+                  {story ? <span className="story">{story}</span> : null}{" "}
+                  <strong>{klipp(topp.claim, 120)}</strong>
+                </>
+              )
+            })()}
+          </Svar>
+        )}
+        {natt.funn.length > 0 ? (
           <>
-            <Svar>
-              Anakin fant <strong>{natt.perAgent.anakin}</strong> ting, IndigoBot{" "}
-              <strong>{natt.perAgent.indigo}</strong>
-            </Svar>
             <Hjelp>
+              Anakin {natt.perAgent.anakin} · IndigoBot {natt.perAgent.indigo}.
               {natt.siste
-                ? `Siste funn kom for ${varighet(natt.siste, naa)} siden.`
+                ? ` Siste funn for ${varighet(natt.siste, naa)} siden.`
                 : ""}
             </Hjelp>
             <Detaljer tekst="Se funnene">
@@ -330,8 +342,20 @@ export default async function DagensSide() {
                 })}
               </Liste>
             </Detaljer>
+            {natt.funn[0].source_url ? (
+              <Knapper>
+                <a
+                  className="ny-knapp primaer"
+                  href={natt.funn[0].source_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Åpne funnet
+                </a>
+              </Knapper>
+            ) : null}
           </>
-        )}
+        ) : null}
       </Seksjon>
 
       <Seksjon merkelapp="Kunnskapen">

@@ -13,6 +13,7 @@ import {
   koeFersk,
   kortStatus,
   kortUtdrag,
+  klipp,
   kr,
   koen,
   lede,
@@ -150,6 +151,21 @@ describe("nattensFunn", () => {
     const rader = [funn("bra", "agent-anakinbot", "2026-09-16T03:00:00Z")]
     rader.push({ ...funn("darlig", "agent-anakinbot", "x"), created_at: "x" })
     expect(nattensFunn(rader, NAA).funn.map((f) => f.id)).toEqual(["bra"])
+  })
+})
+
+describe("klipp", () => {
+  it("kutter ikke en kort tekst", () => {
+    expect(klipp("kort og godt", 120)).toBe("kort og godt")
+  })
+  it("kutter paa ordgrense og legger paa heller-tegn", () => {
+    const lang = "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua".repeat(1)
+    const ut = klipp(lang, 40)
+    expect(ut.length).toBeLessThanOrEqual(40)
+    expect(ut.endsWith("…")).toBe(true)
+  })
+  it("normaliserer linjebrudd og mellomrom til én linje", () => {
+    expect(klipp("a\n b   c", 120)).toBe("a b c")
   })
 })
 
