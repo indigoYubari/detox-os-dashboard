@@ -33,7 +33,12 @@ const BETALTE = ["google_ads", "meta"]
 type Tilstand =
   | { slag: "laster" }
   | { slag: "tom" }
-  | { slag: "ok"; m: MetricsResponse; trend: TrendResponse | null }
+  | {
+      slag: "ok"
+      m: MetricsResponse
+      trend: TrendResponse | null
+      trendFeil: boolean
+    }
   | { slag: "feil"; hint: string }
 
 function dagerSiden(n: number): string {
@@ -83,14 +88,29 @@ export function LønnsomhetISeg() {
     let avbrutt = false
     const since = dagerSiden(DAGER)
     const until = new Date().toISOString().slice(0, 10)
-    Promise.all([
-      getMetrics(since, until),
-      getTrend(since, until).catch(() => null),
-    ])
-      .then(([m, trend]) => {
+    // To uavhengige kilder: hovedtallet (getMetrics) og trenden (getTrend).
+    // Feiler trenden, viser vi hovedtallet + sier hvilken kilde som feilet —
+    // ikke ett bare «for lite data»-svar.
+    const trendLøfte = getTrend(since, until)
+      .then((trend) => ({ ok: true as const, trend }))
+      .catch((e: unknown) => ({
+        ok: false as const,
+        trend: null,
+        feil:
+          e instanceof ApiError
+            ? (e.hint ?? "Trendkilden svarte uten forklaring.")
+            : "Trendkilden lot seg ikke nå.",
+      }))
+    Promise.all([getMetrics(since, until), trendLøfte])
+      .then(([m, tr]) => {
         if (avbrutt) return
         if (m.totals.adSpend <= 0) return setTilstand({ slag: "tom" })
-        setTilstand({ slag: "ok", m, trend })
+        setTilstand({
+          slag: "ok",
+          m,
+          trend: tr.ok ? tr.trend : null,
+          trendFeil: !tr.ok,
+        })
       })
       .catch((e: unknown) => {
         if (avbrutt) return
@@ -152,7 +172,13 @@ export function LønnsomhetISeg() {
         {DAGER} dager.
       </Hjelp>
 
-      {graf.length > 1 && categories.length > 0 ? (
+      {tilstand.trendFeil ? (
+        <Hjelp>
+          <span className="varsel">Trenden lot seg ikke hente.</span> Blended
+          ROAS og kanalene er fra hovedkilden — trenden er en egen kilde
+          (getTrend).
+        </Hjelp>
+      ) : graf.length > 1 && categories.length > 0 ? (
         <LineChart
           data={graf}
           index="date"

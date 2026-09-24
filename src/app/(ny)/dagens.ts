@@ -291,6 +291,16 @@ export function kortUtdrag(body: unknown, maks: number = 120): string {
   return t.length > maks ? `${t.slice(0, maks - 1).trimEnd()}…` : t
 }
 
+/** Kutt en tekstrute til `maks` tegn, paa ordgrense, med «…». For ledetraader. */
+export function klipp(tekst: string, maks: number = 120): string {
+  const t = tekst.replace(/\s+/g, " ").trim()
+  if (t.length <= maks) return t
+  let ende = maks - 1
+  const mellomrom = t.lastIndexOf(" ", ende)
+  if (mellomrom > maks * 0.6) ende = mellomrom
+  return `${t.slice(0, ende).trimEnd()}…`
+}
+
 function kortRang(status: string): number {
   return status === "active" ? 0 : status === "draft" ? 1 : 2
 }
