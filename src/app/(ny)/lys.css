@@ -453,3 +453,180 @@
   color: var(--ny-varsel);
   align-self: center;
 }
+
+/* ── meny i toppen ──────────────────────────────────────────── */
+
+.ny-nav {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+}
+
+.ny-nav a {
+  color: var(--ny-tekst-2);
+  text-decoration: none;
+  padding: 4px 0;
+  border-bottom: 1px solid transparent;
+}
+
+.ny-nav a:hover {
+  color: var(--ny-aksent);
+  border-bottom-color: var(--ny-aksent-linje);
+}
+
+@media (max-width: 640px) {
+  .ny-topp {
+    flex-wrap: wrap;
+  }
+  .ny-nav {
+    order: 3;
+    width: 100%;
+    gap: 14px;
+  }
+}
+
+/* ── /kort: kortlista ───────────────────────────────────────── */
+
+.ny-kortrad {
+  display: block;
+  padding: 14px 0 12px;
+  border-top: 1px solid var(--ny-linje-svak);
+  margin-top: 12px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.ny-kortrad:hover .ny-kortrad-tittel {
+  color: var(--ny-aksent);
+}
+
+.ny-kortrad-story {
+  display: block;
+  font-size: 12px;
+  color: var(--ny-dempet);
+  letter-spacing: 0.02em;
+  margin-bottom: 2px;
+}
+
+.ny-kortrad-tittel {
+  display: block;
+  font-size: 16.5px;
+  font-weight: 500;
+}
+
+.ny-kortrad-utdrag {
+  display: block;
+  font-size: 14px;
+  color: var(--ny-tekst-2);
+  margin-top: 4px;
+}
+
+.ny-kortrad-meta {
+  display: block;
+  font-size: 12.5px;
+  color: var(--ny-dempet);
+  margin-top: 6px;
+}
+
+/* ── /kort/[id]: ett kort ───────────────────────────────────── */
+
+.ny-kort-overskrift {
+  font-size: 17px;
+  font-weight: 500;
+  margin: 0 0 6px;
+}
+
+.ny-kort-tekst {
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: var(--ny-tekst-2);
+  margin: 0;
+}
+
+.ny-kanaler {
+  margin: 0;
+}
+
+.ny-kanaler div {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ny-linje-svak);
+}
+
+.ny-kanaler div:last-child {
+  border-bottom: 0;
+}
+
+.ny-kanaler dt {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ny-dempet);
+  margin-bottom: 4px;
+}
+
+.ny-kanaler dd {
+  margin: 0;
+  font-size: 15px;
+  color: var(--ny-tekst-2);
+}
+
+.ny-punkter {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+}
+
+.ny-punkter li {
+  padding: 7px 0 7px 18px;
+  position: relative;
+  font-size: 15px;
+  color: var(--ny-tekst-2);
+  border-bottom: 1px solid var(--ny-linje-svak);
+}
+
+.ny-punkter li:last-child {
+  border-bottom: 0;
+}
+
+.ny-punkter li::before {
+  content: "·";
+  position: absolute;
+  left: 4px;
+  color: var(--ny-dempet);
+}
+
+.ny-punkter.aldri li::before {
+  content: "✕";
+  font-size: 11px;
+  top: 10px;
+  color: var(--ny-varsel);
+}
+
+/* ── /koe og /ideer: lenke og lys på en post ────────────────── */
+
+.ny-post-les {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+}
+
+.ny-post-les a {
+  color: var(--ny-aksent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--ny-aksent-linje);
+}
+
+.ny-lys {
+  font-size: 13.5px;
+  color: var(--ny-aksent);
+  margin: 8px 0 0;
+}
+
+.ny-lys.gul,
+.ny-lys.rod {
+  color: var(--ny-varsel);
+}
+
+.ny-kvittering a {
+  color: inherit;
+}

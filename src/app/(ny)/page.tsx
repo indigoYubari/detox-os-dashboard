@@ -2,6 +2,8 @@ import Link from "next/link"
 
 import { fetchQueue } from "@/lib/eiere-server"
 import { IKKE_KOBLET_TEKST, fetchKoer, type Koe } from "@/lib/koer-server"
+import { ideDeler, kortSti, lysAv, lysTekst, type IdeRad } from "@/lib/kort"
+import { fetchIdeer } from "@/lib/kort-server"
 import { fetchKort } from "@/lib/kunnskap-server"
 import { fetchAnnonseRaad } from "@/lib/raad-server"
 import { DEFAULT_FILTERS, storyOf, type FindingRow } from "@/lib/radar"
@@ -134,6 +136,16 @@ async function lesKort(): Promise<{ kort: KortStatus; feil: string | null }> {
   }
 }
 
+async function lesIdeer(): Promise<{ ideer: IdeRad[]; feil: string | null }> {
+  try {
+    const res = await fetchIdeer()
+    if (!res.ok) return { ideer: [], feil: res.error }
+    return { ideer: res.rows, feil: null }
+  } catch (e) {
+    return { ideer: [], feil: feilTekst(e) }
+  }
+}
+
 async function lesSystem(naa: Date): Promise<{ system: SystemStatus; feil: string | null }> {
   try {
     const res = await fetchRunState()
@@ -153,6 +165,7 @@ export default async function DagensSide() {
     { raad, feil: raadFeil },
     { kort, feil: kortFeil },
     { system, feil: systemFeil },
+    { ideer, feil: ideerFeil },
   ] = await Promise.all([
     lesKoe(),
     lesNatt(),
@@ -160,6 +173,7 @@ export default async function DagensSide() {
     lesRaad(),
     lesKort(),
     lesSystem(naa),
+    lesIdeer(),
   ])
   const { koer, v, feil: koerFeil } = koerRes
   const kundeservice = koer.find((k) => k.id === KUNDESERVICE_KOE) ?? null
@@ -358,7 +372,7 @@ export default async function DagensSide() {
         ) : null}
       </Seksjon>
 
-      <Seksjon merkelapp="Kunnskapen">
+      <Seksjon merkelapp="Kortene">
         {kortFeil ? (
           <Stille>
             <span className="varsel">Fikk ikke lest kortene.</span> {kortFeil}
@@ -370,14 +384,20 @@ export default async function DagensSide() {
           </Stille>
         ) : (
           <>
-            <Svar>
-              <strong>{kort.aktive}</strong>{" "}
-              {kort.aktive === 1 ? "kort er aktivt" : "kort er aktive"},{" "}
-              <strong>{kort.utkast}</strong> venter på Indigo
-            </Svar>
+            {kort.utkast > 0 ? (
+              <Svar>
+                <strong>{kort.utkast}</strong>{" "}
+                {kort.utkast === 1 ? "kort venter" : "kort venter"} på ja fra deg,{" "}
+                <strong>{kort.aktive}</strong> {kort.aktive === 1 ? "er" : "er"} i bruk
+              </Svar>
+            ) : (
+              <Svar>
+                Alle <strong>{kort.aktive}</strong> {kort.aktive === 1 ? "kortet er" : "kortene er"} i bruk
+              </Svar>
+            )}
             <Hjelp>
-              Ett kort per story: hva vi kan si, og hva vi aldri sier. GPT-ene
-              svarer bare fra aktive kort.
+              Ett kort per story: hva vi kan si, og hva vi aldri sier. DetoxGPT
+              svarer bare fra kort som er i bruk.
               {kort.nyeste
                 ? ` Sist synket for ${varighet(kort.nyeste, naa)} siden.`
                 : ""}
@@ -387,15 +407,47 @@ export default async function DagensSide() {
                 {kort.kort.map((k) => (
                   <Linje
                     key={k.id}
-                    n={k.status === "active" ? "aktivt" : "utkast"}
+                    n={k.status === "active" ? "i bruk" : "venter"}
                   >
                     <span className="story">{k.story}</span>
-                    <b>{k.title}</b>
+                    <Link href={kortSti(k.id)}>
+                      <b>{k.title}</b>
+                    </Link>
                     {k.utdrag ? ` — ${k.utdrag}` : ""}
                   </Linje>
                 ))}
               </Liste>
             </Detaljer>
+            <Knapper>
+              <Link className={kort.utkast > 0 ? "ny-knapp primaer" : "ny-knapp"} href="/kort">
+                {kort.utkast > 0 ? "Les og si ja" : "Se kortene"}
+              </Link>
+            </Knapper>
+          </>
+        )}
+      </Seksjon>
+
+      <Seksjon merkelapp="Idéer">
+        {ideerFeil ? (
+          <Stille>
+            <span className="varsel">Fikk ikke lest idéene.</span> {ideerFeil}
+          </Stille>
+        ) : ideer.length === 0 ? (
+          <Stille>Ingen idéer fra Indigo ennå. De kommer hit når Kim ber om en vinkel.</Stille>
+        ) : (
+          <>
+            <Svar>
+              <strong>{ideer.length}</strong> {ideer.length === 1 ? "idé" : "idéer"} fra Indigo
+            </Svar>
+            <Hjelp>
+              Nyeste: «{ideer[0].title}» — {lysTekst(lysAv(ideer[0].tags))}.
+              {ideDeler(ideer[0].excerpt).setning ? ` ${ideDeler(ideer[0].excerpt).setning}` : ""}
+            </Hjelp>
+            <Knapper>
+              <Link className="ny-knapp primaer" href="/ideer">
+                Se idéene og bestill utkast
+              </Link>
+            </Knapper>
           </>
         )}
       </Seksjon>

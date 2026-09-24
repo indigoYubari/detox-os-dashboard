@@ -45,18 +45,32 @@ export const KOE_REKKEFOLGE = [
 export const KOE_NAVN: Record<string, string> = {
   kundeservice: "Kundeservice",
   "stemme-utkast": "Stemme-utkast",
-  "kim-kort": "Kort til godkjenning",
+  "kim-kort": "Kort som venter på ja fra deg",
   "annonse-raad": "Annonse-råd",
 }
 
 /** Hva et ja og et nei betyr, per kø — teksten på knappene. */
 export const JA_TEKST: Record<string, string> = {
-  "kim-kort": "Aktiver kortet",
+  "kim-kort": "Ja, ta kortet i bruk",
   "annonse-raad": "Godkjenn",
 }
 export const NEI_TEKST: Record<string, string> = {
   "kim-kort": "Ikke ennå",
   "annonse-raad": "Avvis",
+}
+
+/** Én linje under kø-overskriften som sier hva et ja gjør. Ingen linje = ingen forklaring nødvendig. */
+export const KOE_HJELP: Record<string, string> = {
+  "kim-kort":
+    "Et kort er Indigos oppsummering av én story: hva vi kan si, og hva vi aldri sier. " +
+    "Sier du ja, kan DetoxGPT og agentene bruke det. Ingenting publiseres. Les kortet før du svarer.",
+  "annonse-raad": "Et ja sender rådet videre til annonsemotoren. Ingenting endres i annonsene uten det.",
+}
+
+/** Der posten kan leses i sin helhet i denne flaten. null = bare det som står i posten. */
+export function lesLenke(post: Pick<KoePost, "koe_id" | "ekstern_id">): string | null {
+  if (post.koe_id === "kim-kort" && /^[0-9a-f-]{36}$/i.test(post.ekstern_id)) return `/kort/${post.ekstern_id}`
+  return null
 }
 
 /**

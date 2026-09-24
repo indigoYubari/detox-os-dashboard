@@ -26,6 +26,12 @@ export default function NyLayout({
           <div className="ny-merke">
             detox<span>.OS</span>
           </div>
+          <nav className="ny-nav" aria-label="Sider">
+            <Link href="/">I dag</Link>
+            <Link href="/koe">Venter på deg</Link>
+            <Link href="/kort">Kortene</Link>
+            <Link href="/ideer">Idéer</Link>
+          </nav>
           <div className="ny-topp-hoyre">
             <Link href="/overview">Gammelt dashbord</Link>
           </div>

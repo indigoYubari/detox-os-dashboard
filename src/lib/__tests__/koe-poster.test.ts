@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  lesLenke,
   eierFilter,
   eierNavn,
   erBeslutning,
@@ -84,7 +85,7 @@ describe("grupper", () => {
       post("6", "kundeservice", "indigo", 1),
     ])
     expect(g.map((x) => x.koe_id)).toEqual(["kundeservice", "kim-kort", "annonse-raad", "ukjent-koe"])
-    expect(g[1].navn).toBe("Kort til godkjenning")
+    expect(g[1].navn).toBe("Kort som venter på ja fra deg")
     expect(g[1].poster.map((p) => p.id)).toEqual(["3", "4", "2"])
     expect(g[3].navn).toBe("ukjent-koe")
   })
@@ -94,5 +95,15 @@ describe("grupper", () => {
     expect(prioritetTekst(1)).toBe("viktig")
     expect(prioritetTekst(2)).toBeNull()
     expect(prioritetTekst(3)).toBe("kan vente")
+  })
+})
+
+describe("lesLenke", () => {
+  it("peker kim-kort-poster paa kortsiden, ingenting annet", () => {
+    expect(lesLenke({ koe_id: "kim-kort", ekstern_id: "3f2a1b4c-0000-4000-8000-000000000000" })).toBe(
+      "/kort/3f2a1b4c-0000-4000-8000-000000000000",
+    )
+    expect(lesLenke({ koe_id: "kim-kort", ekstern_id: "ikke-uuid" })).toBeNull()
+    expect(lesLenke({ koe_id: "kundeservice", ekstern_id: "3f2a1b4c-0000-4000-8000-000000000000" })).toBeNull()
   })
 })
