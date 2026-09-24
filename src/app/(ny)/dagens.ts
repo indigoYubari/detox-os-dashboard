@@ -7,6 +7,7 @@
 
 import type { FindingRow } from "@/lib/radar"
 import type { RequestRow } from "@/lib/eiere"
+import { utenMarkdown } from "@/lib/kort"
 import type { KortRad } from "@/lib/kunnskap-server"
 import type { RaadRad } from "@/lib/raad-server"
 import type { RunStateRad } from "@/lib/system-server"
@@ -287,7 +288,7 @@ export function kortUtdrag(body: unknown, maks: number = 120): string {
   if (!body || typeof body !== "object") return ""
   const v = (body as Record<string, unknown>).betydning_for_detox
   if (typeof v !== "string") return ""
-  const t = v.replace(/\s+/g, " ").trim()
+  const t = utenMarkdown(v.replace(/\s+/g, " ").trim())
   return t.length > maks ? `${t.slice(0, maks - 1).trimEnd()}…` : t
 }
 

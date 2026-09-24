@@ -5,7 +5,9 @@ import {
   eierNavn,
   forEier,
   grupper,
+  KOE_HJELP,
   KOE_NAVN,
+  lesLenke,
   prioritetTekst,
   UTEN_POSTER,
   type EierFilter,
@@ -14,7 +16,7 @@ import {
 import { fetchPoster, POSTER_IKKE_KOBLET } from "@/lib/koe-poster-server"
 import { fetchKoer, type Koe } from "@/lib/koer-server"
 
-import { Knapper, Seksjon, Stille, Svar } from "../Seksjon"
+import { Hjelp, Knapper, Seksjon, Stille, Svar } from "../Seksjon"
 import { varighet } from "../dagens"
 import { PostKnapper } from "./PostKnapper"
 
@@ -50,6 +52,11 @@ function Post({ post, naa }: { post: KoePost; naa: Date }) {
       </div>
       <p className="ny-post-tittel">{post.tittel}</p>
       {post.detalj ? <p className="ny-post-detalj">{post.detalj}</p> : null}
+      {lesLenke(post) ? (
+        <p className="ny-post-les">
+          <Link href={lesLenke(post) ?? "#"}>Les hele kortet før du svarer →</Link>
+        </p>
+      ) : null}
       <PostKnapper post={post} />
     </div>
   )
@@ -78,7 +85,7 @@ export default async function KoeSide({
     <>
       <div className="ny-hilsen">
         <div className="ny-dato">
-          <Link href="/">← Dagens</Link>
+          <Link href="/">← I dag</Link>
         </div>
         <h1 className="ny-lede">
           {poster.ok ? lede(venter.length, filter) : "Køen"}
@@ -120,6 +127,7 @@ export default async function KoeSide({
             <strong>{g.poster.length}</strong>{" "}
             {g.poster.length === 1 ? "venter" : "venter"}
           </Svar>
+          {KOE_HJELP[g.koe_id] ? <Hjelp>{KOE_HJELP[g.koe_id]}</Hjelp> : null}
           {g.poster.map((p) => (
             <Post key={p.id} post={p} naa={naa} />
           ))}
