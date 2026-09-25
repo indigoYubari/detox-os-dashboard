@@ -42,3 +42,64 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+
+  roeyktest:
+    name: røyktest (Playwright)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Installer
+        run: npm ci --no-audit --no-fund
+
+      - name: Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Grønn sti krever en testbruker og de ekte NEXT_PUBLIC_*-verdiene som
+      # hemmeligheter i repoet. Mangler de, kjøres bare den røde stien mot
+      # attrapverdier: da skal alt likevel sende til /login og API-et svare 401.
+      - name: Har vi hemmelighetene?
+        id: hemmeligheter
+        env:
+          URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          EMAIL: ${{ secrets.DETOX_SMOKE_EMAIL }}
+          PASSORD: ${{ secrets.DETOX_SMOKE_PASSWORD }}
+        run: |
+          if [ -n "$URL" ] && [ -n "$KEY" ] && [ -n "$EMAIL" ] && [ -n "$PASSORD" ]; then
+            echo "gronn=true" >> "$GITHUB_OUTPUT"; echo "Grønn sti: ja"
+          else
+            echo "gronn=false" >> "$GITHUB_OUTPUT"; echo "Grønn sti: nei (hemmeligheter mangler) — bare rød sti"
+          fi
+
+      - name: Bygg
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ steps.hemmeligheter.outputs.gronn == 'true' && secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://ci-placeholder.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ steps.hemmeligheter.outputs.gronn == 'true' && secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-placeholder' }}
+
+      - name: Start og test
+        run: |
+          npx next start -p 3000 > server.log 2>&1 &
+          for i in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:3000/login && break; sleep 1; done
+          npx playwright test
+        env:
+          BASE_URL: http://127.0.0.1:3000
+          NEXT_PUBLIC_SUPABASE_URL: ${{ steps.hemmeligheter.outputs.gronn == 'true' && secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://ci-placeholder.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ steps.hemmeligheter.outputs.gronn == 'true' && secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-placeholder' }}
+          DETOX_SMOKE_EMAIL: ${{ secrets.DETOX_SMOKE_EMAIL }}
+          DETOX_SMOKE_PASSWORD: ${{ secrets.DETOX_SMOKE_PASSWORD }}
+
+      - name: Skjermbilder
+        if: always() && steps.hemmeligheter.outputs.gronn == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: skjermbilder
+          path: e2e/skjermbilder
+          if-no-files-found: ignore
