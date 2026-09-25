@@ -29,6 +29,7 @@ export default function NyLayout({
           <nav className="ny-nav" aria-label="Sider">
             <Link href="/">I dag</Link>
             <Link href="/koe">Venter på deg</Link>
+            <Link href="/anakin">Anakin</Link>
             <Link href="/kort">Kortene</Link>
             <Link href="/ideer">Idéer</Link>
           </nav>
