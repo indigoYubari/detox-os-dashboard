@@ -31,6 +31,7 @@ export default function NyLayout({
             <Link href="/koe">Venter på deg</Link>
             <Link href="/anakin">Anakin</Link>
             <Link href="/funn">Funnene</Link>
+            <Link href="/butikken">Butikken</Link>
             <Link href="/kort">Kortene</Link>
             <Link href="/ideer">Idéer</Link>
           </nav>
