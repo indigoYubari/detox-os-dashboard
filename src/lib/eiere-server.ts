@@ -126,7 +126,13 @@ export async function fetchRunState(
 
 export type QueueResult = { ok: true; rows: RequestRow[] } | ReadError
 
-/** Kolonnene slik de ligger i requests per 2026-09-11 (ingen delivery_id). */
+/**
+ * Kolonnene slik de ligger i requests per 2026-09-25 (ingen delivery_id,
+ * ingen priority). Prioriteten er IKKE en kolonne — den staar i body-hodet
+ * (`[prio:high]`) og leses med priorityOf i eiere.ts. Ikke legg `priority`
+ * inn her foer kolonnen finnes: PostgREST svarer 400 paa ukjente kolonner,
+ * og hele koeen blir borte.
+ */
 export const REQUEST_ROW_COLUMNS =
   "id, requester, kind, body, status, created_at, response, responded_at, thread_id, parent_id"
 
