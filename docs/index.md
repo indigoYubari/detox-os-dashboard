@@ -11,6 +11,7 @@ Start here when working on Detox OS Dashboard.
 - [Deployment](./deployment.md)
 - [Troubleshooting](./troubleshooting.md)
 - [Indigo Research Prompt](./indigo-research-prompt.md)
+- [Plan 2026-09-25: virkelighetsbevis og køen](./plan-2026-09-25-virkelighetsbevis-og-koen.md)
 
 ## Repo-level docs
 
