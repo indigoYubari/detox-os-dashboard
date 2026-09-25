@@ -333,6 +333,11 @@ export default async function DagensSide() {
                 ) : null}
               </Liste>
             </Detaljer>
+            <Knapper>
+              <Link className="ny-knapp" href="/anakin">
+                Gå til køen og samtalene
+              </Link>
+            </Knapper>
           </>
         )}
       </Seksjon>
