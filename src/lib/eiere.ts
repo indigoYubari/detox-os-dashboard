@@ -1,6 +1,6 @@
 // Eier-oversikt (/eiere). Rene typer, parsere og mapping — ingen Next- eller
 // Supabase-importer, slik at klientkomponenter og tester kan bruke fila.
-// Databasen leses i eiere-server.ts, skrives i app/(main)/eiere/actions.ts.
+// Databasen leses i eiere-server.ts, skrives i app/(ny)/eiere/actions.ts.
 //
 // Kilde for alt her er det som FAKTISK ligger i Detox-basen
 // (kwrjhyytvbcaiszbfria) per 2026-09-08 — se supabase/migrations/0008 og

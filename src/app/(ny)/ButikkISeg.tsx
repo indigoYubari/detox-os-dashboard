@@ -120,7 +120,7 @@ export function ButikkISeg() {
         </Liste>
       </Detaljer>
       <Knapper>
-        <Link className="ny-knapp" href="/butikken">
+        <Link className="ny-knapp" href="/butikk">
           Se butikken siste 30 dager
         </Link>
         <a

@@ -2,8 +2,8 @@
    Rolig brief — lyst designsystem for den nye dashbordflaten.
 
    Alt er scopet til .lys, som settes paa rot-elementet i (ny)/layout.
-   Den gamle, moerke flaten under (main) er derfor uroert: den leser
-   sine egne --os-* tokens fra globals.css og ser noeyaktig lik ut.
+   (Scopet stammer fra tiden da den gamle, moerke flaten laa ved siden
+   av; den er pensjonert 2026-09-25.)
 
    Grunnregelen for denne flaten: ETT klart svar per seksjon. Detaljer
    ligger bak et klikk, aldri i broedteksten. Mye luft, faerre ting.

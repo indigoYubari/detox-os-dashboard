@@ -132,7 +132,7 @@ export function AnnonserISeg({
       </Detaljer>
       <RaadBlokk raad={raad} feil={raadFeil} />
       <Knapper>
-        <Link className="ny-knapp" href="/annonsene">
+        <Link className="ny-knapp" href="/annonser">
           Se annonsene siste 30 dager
         </Link>
       </Knapper>

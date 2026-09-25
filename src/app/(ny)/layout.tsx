@@ -4,10 +4,10 @@ import Link from "next/link"
 import "./lys.css"
 
 // Den nye flaten for Indigo og Anniken. Lyst, rolig, ett svar per seksjon.
-// Ligger ved siden av den gamle (main)-flaten, som beholder sin moerke drakt
-// og sine egne tokens — se lys.css.
+// Fra 2026-09-25 er dette det ene dashbordet; den gamle (main)-flaten er
+// pensjonert (Retning A, Adrian 24.09).
 //
-// force-dynamic av samme grunn som i (main): alt her er dagens tall. En
+// force-dynamic: alt her er dagens tall. En
 // forhaandsrendret HTML ville vaert et oyeblikksbilde fra deploy-dagen.
 export const dynamic = "force-dynamic"
 
@@ -29,16 +29,13 @@ export default function NyLayout({
           <nav className="ny-nav" aria-label="Sider">
             <Link href="/">I dag</Link>
             <Link href="/koe">Venter på deg</Link>
-            <Link href="/anakin">Anakin</Link>
-            <Link href="/funn">Funnene</Link>
-            <Link href="/butikken">Butikken</Link>
-            <Link href="/annonsene">Annonsene</Link>
+            <Link href="/eiere">Anakin</Link>
+            <Link href="/radar">Funnene</Link>
+            <Link href="/butikk">Butikken</Link>
+            <Link href="/annonser">Annonsene</Link>
             <Link href="/kort">Kortene</Link>
             <Link href="/ideer">Idéer</Link>
           </nav>
-          <div className="ny-topp-hoyre">
-            <Link href="/overview">Gammelt dashbord</Link>
-          </div>
         </header>
 
         <main>{children}</main>

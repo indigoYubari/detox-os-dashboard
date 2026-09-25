@@ -334,7 +334,7 @@ export default async function DagensSide() {
               </Liste>
             </Detaljer>
             <Knapper>
-              <Link className="ny-knapp" href="/anakin">
+              <Link className="ny-knapp" href="/eiere">
                 Gå til køen og samtalene
               </Link>
             </Knapper>
@@ -402,7 +402,7 @@ export default async function DagensSide() {
                   Åpne funnet
                 </a>
               ) : null}
-              <Link className="ny-knapp" href="/funn">
+              <Link className="ny-knapp" href="/radar">
                 Se alle funnene
               </Link>
             </Knapper>
