@@ -391,8 +391,8 @@ export default async function DagensSide() {
                 })}
               </Liste>
             </Detaljer>
-            {natt.funn[0].source_url ? (
-              <Knapper>
+            <Knapper>
+              {natt.funn[0].source_url ? (
                 <a
                   className="ny-knapp primaer"
                   href={natt.funn[0].source_url}
@@ -401,8 +401,11 @@ export default async function DagensSide() {
                 >
                   Åpne funnet
                 </a>
-              </Knapper>
-            ) : null}
+              ) : null}
+              <Link className="ny-knapp" href="/funn">
+                Se alle funnene
+              </Link>
+            </Knapper>
           </>
         ) : null}
       </Seksjon>
