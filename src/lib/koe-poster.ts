@@ -39,6 +39,7 @@ export const KOE_REKKEFOLGE = [
   "kundeservice",
   "stemme-utkast",
   "kim-kort",
+  "produkt-kandidater",
   "annonse-raad",
 ] as const
 
@@ -46,25 +47,149 @@ export const KOE_NAVN: Record<string, string> = {
   kundeservice: "Kundeservice",
   "stemme-utkast": "Stemme-utkast",
   "kim-kort": "Kort som venter på ja fra deg",
+  "produkt-kandidater": "Guider som venter på ja",
   "annonse-raad": "Annonse-råd",
 }
 
 /** Hva et ja og et nei betyr, per kø — teksten på knappene. */
 export const JA_TEKST: Record<string, string> = {
   "kim-kort": "Ja, ta kortet i bruk",
+  "produkt-kandidater": "Ja, lag utkast",
   "annonse-raad": "Godkjenn",
 }
 export const NEI_TEKST: Record<string, string> = {
   "kim-kort": "Ikke ennå",
+  "produkt-kandidater": "Ikke nå",
   "annonse-raad": "Avvis",
 }
 
-/** Én linje under kø-overskriften som sier hva et ja gjør. Ingen linje = ingen forklaring nødvendig. */
+/**
+ * Én linje under kø-overskriften som sier hva et ja gjør. Ingen linje = ingen
+ * forklaring nødvendig. Tekstene bygger på det basen faktisk viser (kilde og
+ * utfort_av på postene), ikke på antakelser:
+ * - produkt-kandidater skrives av `demandscan`, og et ja utføres av `demandscan-draft`.
+ * - annonse-raad skrives av post_ads_report hver natt; ventende poster som ikke
+ *   lenger er i toppen av rapporten settes til `utgatt`.
+ */
 export const KOE_HJELP: Record<string, string> = {
   "kim-kort":
     "Et kort er Indigos oppsummering av én story: hva vi kan si, og hva vi aldri sier. " +
     "Sier du ja, kan DetoxGPT og agentene bruke det. Ingenting publiseres. Les kortet før du svarer.",
-  "annonse-raad": "Et ja sender rådet videre til annonsemotoren. Ingenting endres i annonsene uten det.",
+  "produkt-kandidater":
+    "Etterspørselsskanningen fant temaer kundene spør etter, med antall funn bak hvert. " +
+    "Sier du ja, lages det et utkast til guiden. Ingenting publiseres.",
+  "annonse-raad":
+    "Et ja sender rådet videre til annonsemotoren. Ingenting endres i annonsene uten det. " +
+    "Rådene byttes ut hver natt: det som ikke er svart på før neste rapport, kan utgå.",
+}
+
+// ── Alder og kvittering ────────────────────────────────────────────────────
+// Basen har ingen utløpsdato per post, og vi lager ingen. Det vi kan si sant
+// er hvor lenge en post har ventet, hvor mange som utgikk ubesvart, og om
+// huben faktisk utførte det eieren avgjorde (utfort_av/utfort_at).
+
+/** Etter så mange dager sier siden fra om at en post har ventet lenge. */
+export const VENTET_LENGE_DAGER = 7
+
+/** Etter så mange timer uten utfort_at sier siden fra om at huben ikke har utført avgjørelsen. */
+export const UTFORT_SENT_TIMER = 24
+
+export function dagerVentet(post: Pick<KoePost, "opprettet">, naa: Date): number {
+  const t = new Date(post.opprettet).getTime()
+  if (Number.isNaN(t)) return 0
+  return Math.max(0, Math.floor((naa.getTime() - t) / 86_400_000))
+}
+
+export function venterLenge(post: Pick<KoePost, "opprettet">, naa: Date): boolean {
+  return dagerVentet(post, naa) >= VENTET_LENGE_DAGER
+}
+
+/** «har ventet 8 dager» — bare når det er verdt å si (≥ 1 dag). */
+export function ventetTekst(post: Pick<KoePost, "opprettet">, naa: Date): string | null {
+  const d = dagerVentet(post, naa)
+  if (d < 1) return null
+  return `har ventet ${d} ${d === 1 ? "dag" : "dager"}`
+}
+
+export const BESLUTNING_TEKST: Record<string, string> = {
+  ja: "ja",
+  nei: "nei",
+  gjort: "gjort",
+}
+
+export type Kvittering = {
+  /** «Du sa ja for 3 dager siden.» */
+  avgjort: string
+  /** «Utført av demandscan-draft dagen etter.» / «Ikke utført ennå.» */
+  utfort: string
+  /** true når avgjørelsen er eldre enn UTFORT_SENT_TIMER og fortsatt ikke utført. */
+  sent: boolean
+}
+
+function timerMellom(a: string, b: string): number | null {
+  const ta = new Date(a).getTime()
+  const tb = new Date(b).getTime()
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return null
+  return (tb - ta) / 3_600_000
+}
+
+function siden(iso: string, naa: Date): string {
+  const h = timerMellom(iso, naa.toISOString())
+  if (h === null) return "ukjent"
+  if (h < 1) return "under en time siden"
+  if (h < 24) return `${Math.floor(h)} ${Math.floor(h) === 1 ? "time" : "timer"} siden`
+  const d = Math.floor(h / 24)
+  return `${d} ${d === 1 ? "dag" : "dager"} siden`
+}
+
+/**
+ * Kvitteringen på en avgjort post. Sier hva eieren sa, når, og hva huben
+ * gjorde med det — lest fra utfort_av/utfort_at, aldri antatt.
+ */
+export function kvittering(
+  post: Pick<KoePost, "status" | "avgjort_at" | "utfort_av" | "utfort_at">,
+  naa: Date,
+): Kvittering {
+  const hva = BESLUTNING_TEKST[post.status] ?? post.status
+  const avgjort = post.avgjort_at
+    ? `Du sa ${hva} for ${siden(post.avgjort_at, naa)}.`
+    : `Avgjort: ${hva}, tidspunkt ukjent.`
+  if (post.utfort_at) {
+    const etter = post.avgjort_at ? timerMellom(post.avgjort_at, post.utfort_at) : null
+    const naar =
+      etter === null
+        ? `for ${siden(post.utfort_at, naa)}`
+        : etter < 1
+          ? "innen en time"
+          : etter < 24
+            ? `etter ${Math.floor(etter)} ${Math.floor(etter) === 1 ? "time" : "timer"}`
+            : `etter ${Math.floor(etter / 24)} ${Math.floor(etter / 24) === 1 ? "dag" : "dager"}`
+    return {
+      avgjort,
+      utfort: `Utført ${naar}${post.utfort_av ? ` av ${post.utfort_av}` : ""}.`,
+      sent: false,
+    }
+  }
+  const ventetTimer = post.avgjort_at ? timerMellom(post.avgjort_at, naa.toISOString()) : null
+  const sent = ventetTimer !== null && ventetTimer >= UTFORT_SENT_TIMER
+  return { avgjort, utfort: "Ikke utført ennå.", sent }
+}
+
+/** Utgåtte poster per kø innenfor et vindu — det som døde uten svar. */
+export function utgaattPerKoe(
+  poster: readonly Pick<KoePost, "koe_id" | "status" | "oppdatert">[],
+  naa: Date,
+  dager: number = 7,
+): Record<string, number> {
+  const grense = naa.getTime() - dager * 86_400_000
+  const ut: Record<string, number> = {}
+  for (const p of poster) {
+    if (p.status !== "utgatt") continue
+    const t = new Date(p.oppdatert).getTime()
+    if (Number.isNaN(t) || t < grense) continue
+    ut[p.koe_id] = (ut[p.koe_id] ?? 0) + 1
+  }
+  return ut
 }
 
 /** Der posten kan leses i sin helhet i denne flaten. null = bare det som står i posten. */
