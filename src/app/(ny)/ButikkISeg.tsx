@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState } from "react"
 
 import { ApiError, getInventory, getMetrics } from "@/lib/detox-api"
@@ -119,6 +120,9 @@ export function ButikkISeg() {
         </Liste>
       </Detaljer>
       <Knapper>
+        <Link className="ny-knapp" href="/butikken">
+          Se butikken siste 30 dager
+        </Link>
         <a
           className="ny-knapp"
           href="https://admin.shopify.com"
