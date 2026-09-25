@@ -29,7 +29,13 @@ import {
 import { useOnWindowResize } from "@/lib/useOnWindowResize"
 import { cx, percentageFormatter } from "@/lib/utils"
 import { Badge } from "./Badge"
-import { getBadgeType } from "./ui/overview/DashboardChartCard"
+
+/** Farge paa endrings-merket i tooltipen. Laa foer i det gamle dashbordets ChartCard. */
+const getBadgeType = (value: number) => {
+  if (value > 0) return "success"
+  if (value < 0) return value < -50 ? "warning" : "error"
+  return "neutral"
+}
 
 //#region Legend
 

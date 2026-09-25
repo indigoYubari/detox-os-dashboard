@@ -2,45 +2,17 @@ export const siteConfig = {
   name: "detox.OS",
   url: "https://os.detox.no",
   description: "Operator-OS for detox.no",
+  /** Sidene i den ene flaten (src/app/(ny)). Det gamle dashbordet er pensjonert 2026-09-25. */
   baseLinks: {
     home: "/",
-    /** Den nye, lyse flaten for Kim og Anniken. */
     dagens: "/",
-    /** Det gamle dashbordet — naa bak /overview, ikke /. */
-    gammelt: "/overview",
-    // Daglig
+    koe: "/koe",
+    kort: "/kort",
+    ideer: "/ideer",
     eiere: "/eiere",
-    idag: "/i-dag",
     radar: "/radar",
-    status: "/status",
-    overview: "/overview",
-    oversikt: "/oversikt",
-    // Vekst
-    annonser: "/annonser",
-    annonserKanaler: "/annonser/kanaler",
-    annonserKampanjer: "/annonser/kampanjer",
-    annonserSoketermer: "/annonser/soketermer",
-    annonserAnbefalinger: "/annonser/anbefalinger",
-    annonserForslag: "/annonser/forslag",
-    annonserTrafikksegment: "/annonser/trafikksegment",
     butikk: "/butikk",
-    kundeservice: "/kundeservice",
-    anmeldelser: "/anmeldelser",
-    innhold: "/innhold",
-    quiz: "/quiz",
-    // Operasjon
-    klinisk: "/klinisk",
-    leverandorer: "/leverandorer",
-    agenter: "/agenter",
-    pipelines: "/pipelines",
-    sops: "/sops",
-    // Kunnskap
-    notater: "/notater",
-    roadmap: "/roadmap",
-    claude: "/claude",
-    // Virksomhet
-    okonomi: "/okonomi",
-    innstillinger: "/innstillinger",
+    annonser: "/annonser",
   },
 }
 

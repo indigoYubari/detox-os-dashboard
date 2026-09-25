@@ -4,6 +4,30 @@ All notable changes to Detox OS Dashboard should be documented here.
 
 ## Unreleased
 
+### 2026-09-25 — Én flate: (main) pensjonert, nye sider på de gamle stiene
+
+Retning A (Adrian 24.09, ja til hele (main) 25.09): den nye lyse flaten er det
+ene dashbordet.
+
+#### Added
+
+- **`/eiere`** («Anakin»): pulsen, planen, briefingen, samtalene, køen og uken
+  fra Anakins Content Radar. Alt som skrives går til `requests`.
+- **`/radar`** («Funnene»): funn-utforsker, 7/30 dager, agent og type.
+- **`/butikk`** («Butikken»): Shopify-dykket, live fra ad-agenten.
+- **`/annonser`** («Annonsene»): betalt media, kampanjer, søkeord, forslag og
+  rådene i basen. Kun lesing; ja/nei gis i køen.
+- Agentkøen på forsiden leser `priority` fra body-hodet og setter høy/kritisk
+  først.
+
+#### Removed
+
+- **`src/app/(main)/`** med alle sidene (overview, oversikt, i-dag, status,
+  agenter, innhold, quiz, anmeldelser, klinisk, leverandorer, pipelines, sops,
+  notater, roadmap, claude, kundeservice, okonomi, innstillinger, og de gamle
+  eiere/radar/butikk/annonser). Komponentene og `src/data/` som bare den
+  brukte, `npm run generate`, og «Gammelt dashbord»-lenken.
+
 ### 2026-09-16 — «Dagens»: ny, lys forside for Kim og Anniken
 
 En ny flate for eierne, bygget ved siden av den gamle. Det gamle dashbordet er

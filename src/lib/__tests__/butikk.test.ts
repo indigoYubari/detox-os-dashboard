@@ -320,11 +320,11 @@ describe("ikke-koblet-listen", () => {
 })
 
 describe("kildekode-vakt", () => {
-  it("/butikk har ingen hardkodede datakonstanter igjen", async () => {
+  it("/butikk (ButikkDykk) har ingen hardkodede datakonstanter igjen", async () => {
     const { readFileSync } = await import("node:fs")
     const { resolve } = await import("node:path")
     const kode = readFileSync(
-      resolve(__dirname, "../../app/(main)/butikk/page.tsx"),
+      resolve(__dirname, "../../app/(ny)/butikk/ButikkDykk.tsx"),
       "utf-8",
     )
       .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -346,8 +346,8 @@ describe("kildekode-vakt", () => {
     // Tooltips og feilhint er tekst eieren leser; ingen av dem faar naevne
     // tabeller eller endepunkter.
     expect(kode).not.toMatch(/channel_metrics|entity_name|\/api\/metrics/)
-    // En kort-stil: den etablerte (KpiCard/OsCard), ikke Tremor-graa kort.
-    expect(kode).toContain("OsCard")
+    // Den nye flatens form: Seksjon/Svar/Hjelp, ikke Tremor-graa kort.
+    expect(kode).toContain("Seksjon")
     expect(kode).not.toMatch(/border-gray-200 bg-white/)
     // Vinduet skal komme fra butikkVindu (til og med i gaar), ikke regnes
     // lokalt med subDays - det ga 31 dager med en tom siste dag.

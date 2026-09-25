@@ -1,6 +1,6 @@
 // Eier-oversikt (/eiere). Rene typer, parsere og mapping — ingen Next- eller
 // Supabase-importer, slik at klientkomponenter og tester kan bruke fila.
-// Databasen leses i eiere-server.ts, skrives i app/(main)/eiere/actions.ts.
+// Databasen leses i eiere-server.ts, skrives i app/(ny)/eiere/actions.ts.
 //
 // Kilde for alt her er det som FAKTISK ligger i Detox-basen
 // (kwrjhyytvbcaiszbfria) per 2026-09-08 — se supabase/migrations/0008 og
@@ -61,6 +61,13 @@ export type RequestRow = {
    *  (thread_id) og på raden de svarer på (parent_id). */
   thread_id?: string | null
   parent_id?: string | null
+  /** Prioritet. Verifisert 2026-09-25 mot kwrj: `requests` har INGEN
+   *  priority-kolonne (10 kolonner: id … parent_id). Skriveren
+   *  (detox_actions POST /request, brukt av indigo-pilot) legger den i stedet
+   *  foerst i body som `[to:<agent>] [prio:<low|normal|high>] …`. Feltet her er
+   *  derfor avledet — se priorityOf — og settes aldri av en select. Kommer
+   *  kolonnen en dag (krever Adrians ja paa schema), leses den foran body. */
+  priority?: string | null
 }
 
 export type RunStateRow = {
@@ -636,12 +643,16 @@ export function parseRequestBody(body: string): ParsedRequestBody {
   const lines = body.split("\n")
   const m = BODY_HEAD_RE.exec(lines[0] ?? "")
   if (!m) {
+    // Ikke dashbordets hode. Rader fra detox_actions (indigo-pilot) starter
+    // med `[to:…] [prio:…]`; mottakeren leses derfra, taggene holdes ute av
+    // sammendraget. Prioriteten leses av priorityOf, ikke her.
+    const to = /\[to:\s*([^\]\s]+)\s*\]/i.exec(lines[0] ?? "")?.[1] ?? null
     return {
       type: null,
-      to: null,
+      to,
       period: null,
       ref: null,
-      summary: body.trim(),
+      summary: stripBodyTags(body).trim(),
     }
   }
   const type = isRequestType(m[1]) ? m[1] : null
@@ -658,6 +669,72 @@ export const QUEUE_STATUSES = ["open", "in_progress"] as const
 
 export function isInQueue(r: Pick<RequestRow, "status">): boolean {
   return (QUEUE_STATUSES as readonly string[]).includes(r.status)
+}
+
+// ── Prioritet ────────────────────────────────────────────────────────────────
+// Kontrakten (Whatson 25.09): priority skal INN i lesesiden, ikke ut av
+// skriveren. Basen har ingen kolonne for den, saa den leses fra body-hodet
+// slik detox_actions skriver det: `[to:agent-anakinbot] [prio:high] tekst…`.
+// Per 25.09 baerer 10 av 19 rader i kwrj en slik tag, alle `high`.
+
+export const PRIORITIES = ["low", "normal", "high", "critical"] as const
+export type Priority = (typeof PRIORITIES)[number]
+
+export function isPriority(v: unknown): v is Priority {
+  return (PRIORITIES as readonly unknown[]).includes(v)
+}
+
+/** Lavere tall = foerst i koeen. Ukjent/mangler sorteres som normal. */
+export const PRIORITY_RANK: Record<Priority, number> = {
+  critical: 0,
+  high: 1,
+  normal: 2,
+  low: 3,
+}
+
+/** `[prio:high]` / `[priority: high]` i foerste linje av body. */
+const PRIO_TAG_RE = /\[prio(?:rity)?:\s*([a-z]+)\s*\]/i
+/** Serverens hode: `[to:…]` og `[prio:…]`-tagger foerst i body. */
+const BODY_TAGS_RE = /^(?:\s*\[(?:to|prio|priority):[^\]]*\])+\s*/i
+
+/** Prioriteten fra body-hodet — null naar ingen tag, eller ukjent verdi. */
+export function priorityFromBody(body: string): Priority | null {
+  const m = PRIO_TAG_RE.exec(body.split("\n")[0] ?? "")
+  if (!m) return null
+  const v = m[1].toLowerCase()
+  return isPriority(v) ? v : null
+}
+
+/**
+ * Raden sin prioritet: kolonnen om den finnes (den gjoer ikke det i dag),
+ * ellers body-hodet. null = ikke oppgitt — vises da ikke som «normal», for
+ * det vet vi ikke.
+ */
+export function priorityOf(
+  r: Pick<RequestRow, "body"> & { priority?: string | null },
+): Priority | null {
+  if (typeof r.priority === "string") {
+    const v = r.priority.toLowerCase()
+    if (isPriority(v)) return v
+  }
+  return priorityFromBody(r.body)
+}
+
+export function priorityRank(p: Priority | null): number {
+  return p ? PRIORITY_RANK[p] : PRIORITY_RANK.normal
+}
+
+/** Slik prioriteten leses av et menneske. null naar den ikke er verdt en lapp. */
+export const PRIORITY_LABELS: Record<Priority, string | null> = {
+  critical: "kritisk",
+  high: "haster",
+  normal: null,
+  low: "kan vente",
+}
+
+/** Body uten serverens `[to:…] [prio:…]`-hode — teksten Anakin faktisk fikk. */
+export function stripBodyTags(body: string): string {
+  return body.replace(BODY_TAGS_RE, "")
 }
 
 /**

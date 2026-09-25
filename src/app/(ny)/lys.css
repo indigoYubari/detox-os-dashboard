@@ -2,8 +2,8 @@
    Rolig brief — lyst designsystem for den nye dashbordflaten.
 
    Alt er scopet til .lys, som settes paa rot-elementet i (ny)/layout.
-   Den gamle, moerke flaten under (main) er derfor uroert: den leser
-   sine egne --os-* tokens fra globals.css og ser noeyaktig lik ut.
+   (Scopet stammer fra tiden da den gamle, moerke flaten laa ved siden
+   av; den er pensjonert 2026-09-25.)
 
    Grunnregelen for denne flaten: ETT klart svar per seksjon. Detaljer
    ligger bak et klikk, aldri i broedteksten. Mye luft, faerre ting.
@@ -629,4 +629,143 @@
 
 .ny-kvittering a {
   color: inherit;
+}
+
+/* ── /anakin: pulsen, planen, briefingen, samtalene, koeen, uken ── */
+
+/* Et svar som er en setning fra Anakin, ikke et tall: vanlig stoerrelse. */
+.ny-svar .ny-svar-tekst {
+  font-size: inherit;
+  font-weight: 500;
+}
+
+/* Sitat: Anakins raa tekst, slik hun skrev den. */
+.ny-sitat {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border-left: 2px solid var(--ny-linje);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ny-tekst-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ny-sitat.lang {
+  max-height: 60vh;
+  overflow: auto;
+}
+
+/* Detaljer-lista kan bli lang paa denne siden (funn med evidens, uken). */
+.ny-detaljer.opp:has(.ny-linje-knapper) {
+  max-height: none;
+}
+
+.ny-detaljer li .ny-evidens,
+.ny-detaljer li .ny-kilde,
+.ny-detaljer li .ny-linje-knapper {
+  display: block;
+  margin-top: 4px;
+}
+
+.ny-detaljer li .ny-evidens {
+  font-size: 13px;
+  color: var(--ny-dempet);
+}
+
+.ny-detaljer li .ny-kilde {
+  font-size: 13px;
+  color: var(--ny-aksent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--ny-aksent-linje);
+  display: inline-block;
+}
+
+.ny-linje-knapper {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.ny-knapp.liten {
+  font-size: 12.5px;
+  padding: 5px 10px;
+}
+
+.ny-knapp:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Samtalen: det siste Anakin sa staar synlig, resten bak et klikk. */
+.ny-samtale {
+  padding: 16px 0 4px;
+  border-top: 1px solid var(--ny-linje-svak);
+  margin-top: 12px;
+}
+
+.ny-samtale .ny-vis {
+  margin-top: 6px;
+}
+
+.ny-samtale-kropp {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ny-boble {
+  border: 1px solid var(--ny-linje);
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: var(--ny-flate);
+  max-width: 88%;
+  align-self: flex-end;
+}
+
+.ny-boble.anakin {
+  border-color: var(--ny-aksent-linje);
+  background: var(--ny-aksent-svak);
+  align-self: flex-start;
+}
+
+.ny-boble-hvem {
+  font-size: 12px;
+  color: var(--ny-dempet);
+  margin-bottom: 3px;
+}
+
+.ny-boble-tekst {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ny-tekst-2);
+  white-space: pre-line;
+}
+
+.ny-skriv {
+  margin-top: 6px;
+}
+
+.ny-skriv textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 14.5px;
+  padding: 10px 12px;
+  border: 1px solid var(--ny-linje);
+  border-radius: 10px;
+  background: var(--ny-flate);
+  color: var(--ny-tekst);
+  resize: vertical;
+}
+
+.ny-skriv textarea:disabled {
+  opacity: 0.6;
+}
+
+.ny-skriv .ny-knapper {
+  margin-top: 8px;
 }

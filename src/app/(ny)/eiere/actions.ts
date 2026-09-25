@@ -1,0 +1,363 @@
+"use server"
+
+// Server Actions for /eiere (Anakin-siden i den nye flaten). Eneste
+// skriveflate paa siden, og den skriver KUN til `requests` (insert +
+// status-update). Aldri reports, findings, recommendations, content_items
+// eller activity_events. Ingen publisering.
+//
+// Identitet og scope kommer fra sesjonen (requireDetoxUser), aldri fra
+// klienten. Klientens input valideres mot de faste tabellene i lib/eiere.ts.
+// Logikken er arvet fra den gamle flatens eiere/actions.ts (pensjonert
+// 2026-09-25).
+
+import { revalidatePath } from "next/cache"
+
+import { hasScope } from "@/lib/auth-policy"
+import { createSupabaseServerClient, requireDetoxUser } from "@/lib/auth-server"
+import {
+  awaitingAnakin,
+  buildChatThreadBody,
+  buildRequestBody,
+  CHAT_THREAD_TYPE,
+  DECISIONS,
+  findDuplicateRequest,
+  isDecision,
+  isRefRequestType,
+  isRefTable,
+  isRequestType,
+  QUEUE_STATUSES,
+  refKey,
+  REQUEST_TYPES,
+  requestBodyHead,
+  validMessage,
+  type RefTable,
+  type RequestRow,
+} from "@/lib/eiere"
+import {
+  fetchThread,
+  REQUEST_ROW_COLUMNS,
+  type ThreadRowsResult,
+} from "@/lib/eiere-server"
+
+export type ActionResult =
+  | { ok: true; row: RequestRow; duplicate: boolean }
+  | {
+      ok: false
+      code:
+        | "unauthenticated"
+        | "forbidden"
+        | "invalid"
+        | "not_found"
+        | "not_in_queue"
+        | "db"
+      error: string
+    }
+
+const UUID_RE = /^[0-9a-f-]{36}$/i
+
+/** Sidene som viser requests — begge maa leses paa nytt etter en skriving. */
+function oppdater() {
+  revalidatePath("/eiere")
+  revalidatePath("/")
+}
+
+function validPeriod(v: unknown): string | null {
+  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null
+}
+
+/** Kolonnen som baerer teksten eieren ser, per tabell en ref kan peke paa. */
+const REF_TEXT_COLUMN: Record<RefTable, string> = {
+  recommendations: "action",
+  findings: "claim",
+  content_items: "title",
+}
+
+/** Kolonner som gir Anakin kontekst i en samtale, utover teksten selv. */
+const REF_CONTEXT_COLUMNS: Record<RefTable, string[]> = {
+  recommendations: ["kind", "status"],
+  findings: ["evidence", "source_url"],
+  content_items: ["topic", "stage"],
+}
+
+type SupabaseClient = ReturnType<typeof createSupabaseServerClient>
+
+async function readRefText(
+  supabase: SupabaseClient,
+  table: RefTable,
+  id: string,
+  withContext: boolean,
+): Promise<{ text: string } | { error: string } | null> {
+  const column = REF_TEXT_COLUMN[table]
+  const extra = withContext ? REF_CONTEXT_COLUMNS[table] : []
+  const found = await supabase
+    .from(table)
+    .select(["id", column, ...extra].join(", "))
+    .eq("id", id)
+    .maybeSingle()
+  if (found.error) return { error: found.error.message }
+  const row = found.data as Record<string, unknown> | null
+  const text = row?.[column]
+  if (typeof text !== "string" || text.trim() === "") return null
+  const parts = [text]
+  for (const c of extra) {
+    const v = row?.[c]
+    if (typeof v === "string" && v.trim() !== "") parts.push(`${c}: ${v}`)
+  }
+  return { text: parts.join(" · ") }
+}
+
+async function skriver(): Promise<
+  | { ok: true; actor: string }
+  | { ok: false; code: "unauthenticated" | "forbidden"; error: string }
+> {
+  const user = await requireDetoxUser()
+  if (!user) return { ok: false, code: "unauthenticated", error: "Ikke innlogget" }
+  if (!hasScope(user.scopes, "work:write"))
+    return { ok: false, code: "forbidden", error: "Mangler tilgang (work:write)" }
+  return { ok: true, actor: user.actorLabel }
+}
+
+/**
+ * «Be Anakin gjøre dette» / «Forklar dette funnet» / «Lag utkast» — en
+ * forespoersel som peker paa én rad. Klienten sender bare id; teksten leses fra
+ * basen med brukerens session. Idempotent per (type, radar-periode, ref).
+ */
+export async function createRefRequestAction(input: {
+  type: string
+  refId: string
+  period: string | null
+}): Promise<ActionResult> {
+  const u = await skriver()
+  if (!u.ok) return u
+  if (!isRefRequestType(input.type))
+    return { ok: false, code: "invalid", error: "Ukjent forespørselstype" }
+  if (typeof input.refId !== "string" || !UUID_RE.test(input.refId))
+    return { ok: false, code: "invalid", error: "Ugyldig id" }
+  const period = validPeriod(input.period)
+  const table: RefTable = REQUEST_TYPES[input.type].ref
+
+  const supabase = createSupabaseServerClient()
+  const found = await readRefText(supabase, table, input.refId, false)
+  if (found && "error" in found) return { ok: false, code: "db", error: found.error }
+  if (!found)
+    return { ok: false, code: "not_found", error: "Fant ikke raden det pekes på" }
+  const text = found.text
+  const key = refKey(table, input.refId)
+  const head = requestBodyHead(input.type, period, key)
+  const existing = await supabase
+    .from("requests")
+    .select(REQUEST_ROW_COLUMNS)
+    .in("status", [...QUEUE_STATUSES])
+    .like("body", `${head}%`)
+  if (existing.error) return { ok: false, code: "db", error: existing.error.message }
+  const dup = findDuplicateRequest(
+    (existing.data ?? []) as RequestRow[],
+    input.type,
+    period,
+    key,
+  )
+  if (dup) return { ok: true, row: dup, duplicate: true }
+
+  const inserted = await supabase
+    .from("requests")
+    .insert({
+      requester: u.actor,
+      kind: REQUEST_TYPES[input.type].kind,
+      body: buildRequestBody({
+        type: input.type,
+        period,
+        requestedBy: u.actor,
+        ref: { key, text },
+      }),
+      status: "open",
+    })
+    .select(REQUEST_ROW_COLUMNS)
+    .single()
+  if (inserted.error) return { ok: false, code: "db", error: inserted.error.message }
+
+  oppdater()
+  return { ok: true, row: inserted.data as RequestRow, duplicate: false }
+}
+
+/** «Be Anakin: …» — de generelle bestillingene. Idempotent per (type, periode). */
+export async function createRequestAction(input: {
+  type: string
+  period: string | null
+}): Promise<ActionResult> {
+  const u = await skriver()
+  if (!u.ok) return u
+  if (!isRequestType(input.type) || isRefRequestType(input.type))
+    return { ok: false, code: "invalid", error: "Ukjent forespørselstype" }
+  const period = validPeriod(input.period)
+
+  const supabase = createSupabaseServerClient()
+  const head = requestBodyHead(input.type, period)
+  const existing = await supabase
+    .from("requests")
+    .select(REQUEST_ROW_COLUMNS)
+    .in("status", [...QUEUE_STATUSES])
+    .like("body", `${head}%`)
+  if (existing.error) return { ok: false, code: "db", error: existing.error.message }
+  const dup = findDuplicateRequest(
+    (existing.data ?? []) as RequestRow[],
+    input.type,
+    period,
+  )
+  if (dup) return { ok: true, row: dup, duplicate: true }
+
+  const inserted = await supabase
+    .from("requests")
+    .insert({
+      requester: u.actor,
+      kind: REQUEST_TYPES[input.type].kind,
+      body: buildRequestBody({ type: input.type, period, requestedBy: u.actor }),
+      status: "open",
+    })
+    .select(REQUEST_ROW_COLUMNS)
+    .single()
+  if (inserted.error) return { ok: false, code: "db", error: inserted.error.message }
+
+  oppdater()
+  return { ok: true, row: inserted.data as RequestRow, duplicate: false }
+}
+
+/**
+ * «Snakk om dette» — legger en [chat_thread]-rad med konteksten i requests
+ * (triggeren vekker Anakin), eller fortsetter en traad med eierens egen
+ * melding. Idempotent per element og per traad. responded_at sendes aldri.
+ */
+export async function startChatThreadAction(input: {
+  ref: { table: string; id: string } | null
+  period: string | null
+  continues: { threadId: string; parentId: string } | null
+  message?: string | null
+}): Promise<ActionResult> {
+  const u = await skriver()
+  if (!u.ok) return u
+  const period = validPeriod(input.period)
+  if (!input.ref && !input.continues)
+    return { ok: false, code: "invalid", error: "Samtalen mangler emne" }
+  if (input.ref && (!isRefTable(input.ref.table) || !UUID_RE.test(input.ref.id)))
+    return { ok: false, code: "invalid", error: "Ugyldig referanse" }
+  if (
+    input.continues &&
+    (!UUID_RE.test(input.continues.threadId) || !UUID_RE.test(input.continues.parentId))
+  )
+    return { ok: false, code: "invalid", error: "Ugyldig tråd" }
+  const message =
+    input.message == null || input.message === "" ? null : validMessage(input.message)
+  if (input.message != null && input.message !== "" && !message)
+    return { ok: false, code: "invalid", error: "Meldingen er tom eller for lang" }
+  if (message && !input.continues)
+    return { ok: false, code: "invalid", error: "En melding hører til en tråd" }
+
+  const supabase = createSupabaseServerClient()
+  let ref: { key: string; text: string } | undefined
+  if (input.ref) {
+    const table = input.ref.table as RefTable
+    const found = await readRefText(supabase, table, input.ref.id, true)
+    if (found && "error" in found) return { ok: false, code: "db", error: found.error }
+    if (!found)
+      return { ok: false, code: "not_found", error: "Fant ikke raden det pekes på" }
+    ref = { key: refKey(table, input.ref.id), text: found.text }
+  }
+
+  if (ref) {
+    const head = requestBodyHead(CHAT_THREAD_TYPE, period, ref.key)
+    const existing = await supabase
+      .from("requests")
+      .select(REQUEST_ROW_COLUMNS)
+      .in("status", [...QUEUE_STATUSES])
+      .like("body", `${head}%`)
+    if (existing.error) return { ok: false, code: "db", error: existing.error.message }
+    const dup = findDuplicateRequest(
+      (existing.data ?? []) as RequestRow[],
+      CHAT_THREAD_TYPE,
+      period,
+      ref.key,
+    )
+    if (dup) return { ok: true, row: dup, duplicate: true }
+  }
+  if (input.continues) {
+    const thread = await fetchThread(input.continues.threadId)
+    if (!thread.ok) return { ok: false, code: "db", error: thread.error }
+    const waiting = awaitingAnakin(thread.rows)
+    if (waiting) return { ok: true, row: waiting, duplicate: true }
+  }
+
+  const inserted = await supabase
+    .from("requests")
+    .insert({
+      requester: u.actor,
+      kind: REQUEST_TYPES[CHAT_THREAD_TYPE].kind,
+      body: buildChatThreadBody({
+        period,
+        requestedBy: u.actor,
+        ref,
+        continues: input.continues ?? undefined,
+        message: message ?? undefined,
+      }),
+      status: "open",
+      ...(input.continues
+        ? { thread_id: input.continues.threadId, parent_id: input.continues.parentId }
+        : {}),
+    })
+    .select(REQUEST_ROW_COLUMNS)
+    .single()
+  if (inserted.error) return { ok: false, code: "db", error: inserted.error.message }
+
+  oppdater()
+  return { ok: true, row: inserted.data as RequestRow, duplicate: false }
+}
+
+/** Godkjenn / avvis / marker lest / lukk tråd — kun status-kolonnen i requests. */
+export async function decideRequestAction(input: {
+  id: string
+  decision: string
+}): Promise<ActionResult> {
+  const user = await requireDetoxUser()
+  if (!user) return { ok: false, code: "unauthenticated", error: "Ikke innlogget" }
+  if (!isDecision(input.decision))
+    return { ok: false, code: "invalid", error: "Ukjent beslutning" }
+  const def = DECISIONS[input.decision]
+  if (!hasScope(user.scopes, def.scope))
+    return { ok: false, code: "forbidden", error: `Mangler tilgang (${def.scope})` }
+  if (typeof input.id !== "string" || !UUID_RE.test(input.id))
+    return { ok: false, code: "invalid", error: "Ugyldig id" }
+
+  const supabase = createSupabaseServerClient()
+  const updated = await supabase
+    .from("requests")
+    .update({ status: def.status })
+    .eq("id", input.id)
+    .in("status", [...QUEUE_STATUSES])
+    .select(REQUEST_ROW_COLUMNS)
+    .maybeSingle()
+  if (updated.error) return { ok: false, code: "db", error: updated.error.message }
+  if (!updated.data)
+    return {
+      ok: false,
+      code: "not_in_queue",
+      error: "Forespørselen er allerede avgjort eller finnes ikke",
+    }
+
+  oppdater()
+  return { ok: true, row: updated.data as RequestRow, duplicate: false }
+}
+
+export type ThreadReadResult =
+  | { ok: true; rows: RequestRow[] }
+  | { ok: false; code: "unauthenticated" | "invalid" | "db"; error: string }
+
+/** Samtalevinduets polling: én traad paa nytt, ren lesing. */
+export async function readThreadAction(input: {
+  threadKey: string
+}): Promise<ThreadReadResult> {
+  const user = await requireDetoxUser()
+  if (!user) return { ok: false, code: "unauthenticated", error: "Ikke innlogget" }
+  if (typeof input.threadKey !== "string" || !UUID_RE.test(input.threadKey))
+    return { ok: false, code: "invalid", error: "Ugyldig tråd" }
+  const r: ThreadRowsResult = await fetchThread(input.threadKey)
+  if (!r.ok) return { ok: false, code: "db", error: r.error }
+  return { ok: true, rows: r.rows }
+}

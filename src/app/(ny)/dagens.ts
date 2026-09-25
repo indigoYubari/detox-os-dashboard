@@ -6,7 +6,14 @@
 // ikke er et svar hoerer bak «Se detaljer».
 
 import type { FindingRow } from "@/lib/radar"
-import type { RequestRow } from "@/lib/eiere"
+import {
+  parseRequestBody,
+  PRIORITY_LABELS,
+  priorityOf,
+  priorityRank,
+  type Priority,
+  type RequestRow,
+} from "@/lib/eiere"
 import { utenMarkdown } from "@/lib/kort"
 import type { KortRad } from "@/lib/kunnskap-server"
 import type { RaadRad } from "@/lib/raad-server"
@@ -110,10 +117,41 @@ export function nattensFunn(
 
 // ── Køene ───────────────────────────────────────────────────────────────────
 
+export type Oppdrag = {
+  id: string
+  /** Hvem som bestilte: «detox-gpt», «kim@…», Anakin selv. */
+  fra: string
+  /** Den ene linja som sier hva oppdraget er, uten serverens tagger. */
+  tekst: string
+  prioritet: Priority | null
+  /** Lappen et menneske ser: «haster», «kritisk», «kan vente». null = ingen lapp. */
+  lapp: string | null
+  created_at: string
+}
+
 export type Koen = {
   antall: number
   eldste: string | null
   eldsteAlder: string | null
+  /** Oppdrag merket high eller critical. */
+  haster: number
+  /** Alle aapne oppdrag: kritisk foerst, saa haster, saa resten; eldst foerst innenfor hvert nivaa. */
+  oppdrag: Oppdrag[]
+}
+
+/** Hvor mange oppdrag forsiden lister. Resten er i basen, ikke borte. */
+export const KOE_TOPP = 5
+
+function oppdragAv(r: RequestRow): Oppdrag {
+  const p = priorityOf(r)
+  return {
+    id: r.id,
+    fra: r.requester,
+    tekst: klipp(parseRequestBody(r.body).summary, 140),
+    prioritet: p,
+    lapp: p ? PRIORITY_LABELS[p] : null,
+    created_at: r.created_at,
+  }
 }
 
 /**
@@ -125,16 +163,32 @@ export type Koen = {
  * nei» og telte disse radene, mens det som faktisk ventet på Kim og Anniken var
  * 22 stemme-utkast og 8 P0-helsetråder hos Raphael. Funksjonen beholder navnet
  * sitt, men teksten under påstår ikke lenger at et menneske må svare.
+ *
+ * Prioritet (kontrakt 25.09): skriveren sender low/normal/high, og køen viser
+ * det — høy og kritisk først. Prioriteten står i body-hodet, ikke i en kolonne;
+ * se priorityOf. Et oppdrag uten prioritet sorteres som normal, men får ingen
+ * lapp — vi vet ikke at det er normalt, bare at ingen sa noe.
  */
 export function koen(rows: readonly RequestRow[], naa: Date): Koen {
   const sortert = [...rows].sort((a, b) =>
     a.created_at.localeCompare(b.created_at),
   )
   const eldste = sortert[0]?.created_at ?? null
+  const oppdrag = sortert
+    .map(oppdragAv)
+    .sort(
+      (a, b) =>
+        priorityRank(a.prioritet) - priorityRank(b.prioritet) ||
+        a.created_at.localeCompare(b.created_at),
+    )
   return {
     antall: sortert.length,
     eldste,
     eldsteAlder: eldste ? varighet(eldste, naa) : null,
+    haster: oppdrag.filter(
+      (o) => o.prioritet === "high" || o.prioritet === "critical",
+    ).length,
+    oppdrag,
   }
 }
 

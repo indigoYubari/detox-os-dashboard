@@ -20,6 +20,7 @@ import {
   datoLang,
   koeFersk,
   koen,
+  KOE_TOPP,
   kortStatus,
   klipp,
   lede,
@@ -47,7 +48,7 @@ import {
 //
 // Ingen mock, ingen fallback: hver seksjon sier selv naar den ikke fikk svar.
 
-const TOM_KOE: Koen = { antall: 0, eldste: null, eldsteAlder: null }
+const TOM_KOE: Koen = { antall: 0, eldste: null, eldsteAlder: null, haster: 0, oppdrag: [] }
 const TOM_NATT: NattensFunn = { funn: [], perAgent: { anakin: 0, indigo: 0 }, siste: null }
 const TOM_VENTER: Venter = { totalt: 0, eldsteAlder: null }
 const TOM_KORT: KortStatus = { aktive: 0, utkast: 0, nyeste: null, kort: [] }
@@ -294,15 +295,49 @@ export default async function DagensSide() {
           <Svar>Ingenting står åpent</Svar>
         ) : (
           <>
-            <Svar>
-              <strong>{koe.antall}</strong> oppdrag står åpne
-            </Svar>
+            {koe.haster > 0 ? (
+              <Svar>
+                <span className="varsel">
+                  {koe.haster === 1 ? "Ett haster" : `${koe.haster} haster`}
+                </span>{" "}
+                av <strong>{koe.antall}</strong> åpne oppdrag
+              </Svar>
+            ) : (
+              <Svar>
+                <strong>{koe.antall}</strong> oppdrag står åpne
+              </Svar>
+            )}
             <Hjelp>
               {koe.eldsteAlder
                 ? `Eldste har ligget ${koe.eldsteAlder}. `
                 : ""}
               Bestillinger til agentene — ingenting dere må svare på.
+              {koe.haster > 0
+                ? " Det som haster står først."
+                : ""}
             </Hjelp>
+            <Detaljer tekst="Se oppdragene">
+              <Liste>
+                {koe.oppdrag.slice(0, KOE_TOPP).map((o) => (
+                  <Linje key={o.id} n={o.lapp ?? o.fra}>
+                    {o.prioritet === "high" || o.prioritet === "critical" ? (
+                      <b className="varsel">{o.tekst}</b>
+                    ) : (
+                      o.tekst
+                    )}
+                    {o.lapp ? ` — ${o.fra}` : ""}
+                  </Linje>
+                ))}
+                {koe.antall > KOE_TOPP ? (
+                  <Linje n="">+ {koe.antall - KOE_TOPP} til i køen</Linje>
+                ) : null}
+              </Liste>
+            </Detaljer>
+            <Knapper>
+              <Link className="ny-knapp" href="/eiere">
+                Gå til køen og samtalene
+              </Link>
+            </Knapper>
           </>
         )}
       </Seksjon>
@@ -356,8 +391,8 @@ export default async function DagensSide() {
                 })}
               </Liste>
             </Detaljer>
-            {natt.funn[0].source_url ? (
-              <Knapper>
+            <Knapper>
+              {natt.funn[0].source_url ? (
                 <a
                   className="ny-knapp primaer"
                   href={natt.funn[0].source_url}
@@ -366,8 +401,11 @@ export default async function DagensSide() {
                 >
                   Åpne funnet
                 </a>
-              </Knapper>
-            ) : null}
+              ) : null}
+              <Link className="ny-knapp" href="/radar">
+                Se alle funnene
+              </Link>
+            </Knapper>
           </>
         ) : null}
       </Seksjon>

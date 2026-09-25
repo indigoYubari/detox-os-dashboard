@@ -40,9 +40,9 @@ export const metadata: Metadata = {
   },
 }
 
-// Rot-layouten er naa et nakent skall: html, fonter, tema. Den gamle, moerke
-// appen legger sin egen ramme — sidebar, topbar, partikkelbakgrunn — i
-// (main)/layout.tsx, og den nye lyse flaten legger sin i (ny)/layout.tsx.
+// Rot-layouten er et nakent skall: html, fonter, tema. Flaten legger sin
+// egen ramme i (ny)/layout.tsx. (Den gamle, moerke appen under (main) er
+// pensjonert 2026-09-25.)
 //
 // Foer la rot-layouten paa en sidebar ogsaa paa /login og paa 404-siden, og
 // alle sider laa inne i <main className="lg:pl-[200px]"> — ogsaa de som ikke
