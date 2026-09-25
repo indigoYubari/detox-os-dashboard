@@ -14,7 +14,8 @@ Bruk når du bygger/endrer UI i `(ny)`. Mønsteret er:
 ## 2 · Lesedata (live kilder)  — `src/lib/*`
 - `detox-api.ts` → `getMetrics`/`getTrend`/`getInventory` (Shopify/annonser) til klientseksjoner.
 - `radar.ts` + `radar-server.ts` → funn (`findings`⋈`reports`), `storyOf`, `sinceDate`, `freshnessOf`, `kindLabel`.
-- `koer-server.ts` / `koe-poster.ts` / `eier-server.ts` / `kunnskap-server.ts` / `raad-server.ts` / `system-server.ts` → eierkøer, godkjenning, kort, råd, agentstatus.
+- `koer-server.ts` / `koe-poster.ts` / `eiere-server.ts` / `kunnskap-server.ts` / `raad-server.ts` / `system-server.ts` → eierkøer, godkjenning, kort, råd, agentstatus.
+- `eiere.ts` + `eiere-server.ts` → Anakins radar, `requests` (kø, tråder, prioritet), plan/briefing-parsing.
 - `butikk.ts` / `ad-format.ts` → tall-omforming og ROAS-lesing.
 
 ## 3 · Godkjenningsflaten  — `src/app/(ny)/koe/`
@@ -26,6 +27,23 @@ handler om godkjenning/«Sett avgjort».
 Kort (`kes kort` i `(ny)`: `/kort`, `/kort/<id>`, `/ideer`) — les `kim_cards`/
 `notes.type=ide`. «Ta i bruk» i stedet for «aktiver». Bruk når oppgaven handler
 om Kims kort eller idébanken.
+
+## 4b · Sidene i den ene flaten (25.09)  — `src/app/(ny)/{eiere,radar,butikk,annonser}/`
+Hver side har samme form: `page.tsx` (server, leser med eierens session) +
+én ren hjelperfil med setningene og reglene (`eiere/eiere.ts`, `radar/radar.ts`,
+`butikk/butikk.ts`, `annonser/annonser.ts`), testet i `src/app/(ny)/__tests__/`.
+- `/eiere` («Anakin»): pulsen, planen, briefingen, samtalene, køen, uken.
+  `eiere/actions.ts` er den ENESTE skriveflaten her, og skriver kun til
+  `requests`. Knappene: `BeAnakin`, `Snakk`, `KoeKnapper`, `Samtale`.
+- `/radar` («Funnene»): `findings`⋈`reports`, filtre som lenker. Kun lesing.
+- `/butikk` («Butikken»): `ButikkDykk.tsx` henter metrics/shopify/inventory
+  fra ad-agenten i klienten. Kun lesing.
+- `/annonser` («Annonsene»): `AnnonserDykk.tsx` (metrics, campaign-health,
+  search-terms, proposals) + rådene fra basen. Kun lesing; ja/nei gis i `/koe`.
+Prioritet i Agentkøen: `priorityOf` i `src/lib/eiere.ts` leser `[prio:…]` fra
+body-hodet (ingen kolonne i basen); `koen()` i `dagens.ts` sorterer.
+Den gamle `(main)`-flaten er pensjonert; det finnes ingen «gammel» side å
+lese som referanse lenger.
 
 ## 5 · Logikk-hjelpere  — `src/app/(ny)/dagens.ts`
 Formatering og regler uten React: `kr`, `tall`, `varighet`, `timerSiden`, `klipp`,
