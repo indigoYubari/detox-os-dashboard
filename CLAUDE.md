@@ -1,95 +1,79 @@
-# Detox-dashboard — byggeoppdrag for Claude Code
+# Detox-dashboard — CLAUDE.md for Claude Code
 
-> **Din rolle:** du er byggeren av Detox-dashboardet i *dette* repoet. Din eneste
-> jobb nå er å gjøre den **nye flaten** komplett etter planen under. Bygg, verifisér,
-> lever en PR. **Du merger/deployer aldri selv** — det gjør Adrian etter godkjenning.
-
----
-
-## Steg 0 — FØR du rører noe: les «Mind Matter-måten» (obligatorisk)
-
-Du skal jobbe *slik Mind Matter jobber*. Hent og les dette FØR du bygger noe:
-
-1. **Hvordan agenter arbeider hos Mind Matter:**
-   `https://github.com/MindMatter1444/mindmatter-brain/blob/main/AGENTS.md`
-2. **Merkevare/produkt/sannhetskilde (MMOS)** — samme repo, mappen `MMOS/`:
-   les minst `00-foundation/` og `02-brand/` (f.eks.
-   `.../mindmatter-brain/blob/main/MMOS/00-foundation/...`).
-
-Først når du har lest begge, går du videre til oppgaven. Hvis du ikke kan hente
-dem, si det tydelig i stedet for å gå videre uten.
+> **Din rolle:** du er byggeren av Detox-dashboardet i *dette* repoet. Bygg,
+> verifisér, lever en PR. **Du merger/deployer ikke selv** uten at Adrian sier det
+> eksplisitt i chatten.
 
 ---
 
-## ⛔ BYGG PÅ DEN NYE FLATEN — ALDRI PÅ DEN GAMLE
+## Steg 0 — les «Mind Matter-måten» først (obligatorisk)
 
-- **Byggemålet er `src/app/(ny)/` — DEN NYE FLATEN. BARE DEN.**
-- **`src/app/(main)/` (den gamle) er avviklet.** Den er kun en referanse du kan
-  lese datakilder/konsept fra — **aldri** et byggemål, **aldri** noe du «fikser»,
-  **aldri** noe du gjenoppliver, **aldri** merket «live».
-- Alt du lager havner i `(ny)`. Hvis du vil «reparere» eller «fullføre» en side i
-  `(main)`, gjør du det FEIL — bygg den i `(ny)` i stedet.
-- **Korteste regel: ny = bygge · gammel = les som referanse, ikke rør.**
+1. `https://github.com/MindMatter1444/mindmatter-brain/blob/main/AGENTS.md`
+2. MMOS i samme repo: minst `MMOS/00-foundation/` (001, 002, 005; 010 for agenter)
+   og `MMOS/02-brand/` (003 voice, 004 language).
+
+Kan du ikke hente dem, si det tydelig i stedet for å gå videre uten.
+
+## Steg 1 — les dette repoet
+
+- `SECURITY.md` + `skills/SECRETS-GUARD.md` FØR du kaller verktøy som leser/logger.
+- `skills/SKILL-SPECTRUM.md`: hvilke evner repoet har, og når du bruker hver.
+- `CHANGELOG.md` for hva som sist skjedde.
+
+---
+
+## Tilstanden (oppdatert 2026-09-25)
+
+**Det er én flate: `src/app/(ny)/`.** Den gamle `(main)`-flaten er pensjonert og
+slettet 25.09 (Retning A, Adrian 24.09; ja til hele slettingen 25.09). Det finnes
+ingen «gammel side» å lese som referanse lenger; kildene og reglene ligger i
+`src/lib/*` og i sidene selv.
+
+| Sti | Side | Kilde | Skriver |
+|---|---|---|---|
+| `/` | Dagens | koer, requests, findings⋈reports, recommendations (agent-ads), kim_cards, notes, run_state; Shopify/annonser/Klaviyo via detox-api | ingenting |
+| `/koe` | Venter på deg | koe_poster, koer | kun `koe_poster`-status |
+| `/kort`, `/kort/[id]`, `/ideer` | Kortene, Idéer | kim_cards, notes.type=ide | `koe_poster`-status, `requests` |
+| `/eiere` | Anakin: pulsen, planen, briefingen, samtalene, køen, uken | reports/findings/recommendations, requests, content_items | kun `requests` (`(ny)/eiere/actions.ts`) |
+| `/radar` | Funnene | findings⋈reports | ingenting |
+| `/butikk` | Butikken | ad-agenten via `/api/detox` (metrics, shopify, inventory) | ingenting |
+| `/annonser` | Annonsene | ad-agenten via `/api/detox` + recommendations (agent-ads) | ingenting |
+
+Prioritet i Agentkøen: `priorityOf` i `src/lib/eiere.ts` leser `[prio:…]` fra
+body-hodet i `requests`. Basen har ingen `priority`-kolonne (verifisert 25.09).
+Legg den aldri i selecten før kolonnen finnes.
 
 ---
 
 ## Faste regler (grunnloven)
 
-- **Aldri mock/seed som live.** Alle sider leser levende data. Statisk/mock
-  ryddes FØR noe går live.
-- Bruk det nye mønsteret: `Seksjon` → `Svar` (én linje, hook før tall) → `Hjelp`
-  (én utfyllende linje) → `Detaljer` (liste bak «Se …») → `Knapper` (handling).
-  `Stille` for tom/feil — aldri et falskt nulltall.
-- Levende kilder: `koer`/`koe_poster`, `kim_cards`/`v_kim_cards`,
-  `notes.type=ide`, `findings`⋈`reports`, Shopify/annonser/Klaviyo via detox-api.
+- **Aldri mock/seed som live.** Alle sider leser levende data. Tomt/feil ser
+  tomt/feil ut (`Stille`), aldri et falskt nulltall. `ingen-oppdiktede-tall.test.ts`
+  vokter dette.
+- Mønsteret: `Seksjon` → `Svar` (én linje, hook før tall) → `Hjelp` (én linje) →
+  `Detaljer` (liste bak «Se …») → `Knapper` (handling). Rene hjelpere per side
+  (`<side>/<side>.ts`) med tester i `src/app/(ny)/__tests__/`.
+- Alt leses med eierens egen session (RLS). Aldri service_role i frontend.
 - **Tenant er `kwrj…` (Detox).** Aldri `ifyf…`.
-- For hver PR må `tsc`, `lint` og `npm test` gå grønt. Lever en PR; ikke merge/deploy.
+- Endre aldri `supabase/migrations/` uten Adrians eksplisitte ja. Rør aldri
+  `indigo-pilot` herfra.
+- Avslør aldri hemmeligheter, heller ikke anon-nøkkelen, i output, commits, PR-er
+  eller chat. Bevis = statuskode/antall/tidsstempel.
+- For hver PR: `npx tsc --noEmit`, `npm run lint`, `npx vitest run`, `npm run build`
+  grønne. Etter sletting/flytting av ruter: `rm -rf .next` før `tsc`, ellers gir
+  stale `.next/types` falske feil.
+- En PR per oppdrag. Stabler du PR-er, kan den øverste retargetes til `main` så
+  ett merge tar alt (gjort 25.09 med #46).
 
 ---
 
-## Oppgaven: gjør den nye flaten komplett
+## Åpne punkter (25.09)
 
-Retning **A** (Adrians beslutning 24.09): den nye `(ny)`-flaten blir det **ene**
-dashboardet. Bygg de rike manglende sidene inn i `(ny)`, null mock, og pensjonér
-`(main)` helt. Inventar + rekkefølge (fra Whatson 24.09):
+- Redirects fra gamle stier (`/overview → /`) er ikke lagt inn.
+- `/butikk`: refusjoner, konvertering/besøkende og siste ordrer mangler kilde
+  (`IKKE_KOBLET` i `src/lib/butikk.ts`); to av dem venter på Adrians beslutning.
+- `/kundeservice` og `/okonomi` ble sluppet: kundeservice dekkes av forsiden via
+  Raphaels kø, økonomi har ingen live kilde.
+- `CLAUDE-DEPLOY-DASHBOARD-2026-09-09.md` er historisk og nevner sider som er borte.
 
-### Port inn i `(ny)` (i rekkefølge)
-| # | Side | Hva | Kilde | Merk |
-|---|---|---|---|---|
-| **1** | `/eiere` (owners) | Eiernes flate: PULS · Plan · Briefing · Svar og samtaler · Kø · Uken — hver med «Åpne» + «Snakk om dette» (skriver kun til `requests`) | requests/RLS, findings | Les `(main)/eiere` som referanse for konsept/kilder — bygg i `(ny)` |
-| **2** | `/radar` | Funn-utforsker: 7d/30d + agent/kind-filter, nyeste først | findings⋈reports | Les `(main)/radar` som referanse |
-| **3** | `/annonser`-dykk | Kanaler/kampanjer/råd | anbefalinger i base + ad-backend | Gammel er statisk — **bygg live**, ikke port statisk |
-| **4** | `/butikk`-dykk | Ordre-/produktdypdykk | Shopify via detox-api + product_pipeline | Samme: bygg live |
-| **5** | `/kundeservice`, `/okonomi` | Kun hvis live-koblet; ellers slipp | Raphael-koe / order+Klaviyo+ad | — |
-
-### Kill (portes IKKE — mock/statisk/dekket)
-`anmeldelser` · `quiz` · `innhold` (100% statisk) · `claude` · `innstillinger` ·
-`roadmap` · `pipelines` · `sops` · `notater` · `klinisk` · `leverandorer` ·
-`i-dag` (dekkes av Dagens/Butikk) · `oversikt`/`overview` (dekkes av Lønnsomhet)
-· `agenter`/`status` (dekkes av Systemet).
-
-### Viktig om `/eiere`
-`/eiere` i `(main)` er allerede live og god (seks bånd, RLS, skriver kun til
-`requests`). Ikke la den gå tapt — **port datakildene/konseptet inn i `(ny)/eiere`**
-med det nye designspråket. Ikke erstatt den med noe tynnere.
-
-### Allerede på plass i `(ny)` (kompletter, ikke dupliser)
-`/kort`, `/kort/<id>`, `/ideer` (PR #39). `(ny)/page.tsx` (Dagens) dekker allerede
-Butikk, Lønnsomhet, Annonser+råd, Epost, Kundeservice, Agentkøen, I natt,
-Kunnskapen, Systemet.
-
-### Mål
-Paritet → **skru av `(main)` helt** (fjern «Gammelt dashbord»-lenken).
-
----
-
-## Definition of done
-- Alt ligger i `src/app/(ny)/` — ingenting i `(main)` endret.
-- Ingen mock/statisk presentert som live; tom/feil ser tomt/feil ut.
-- `tsc` + `lint` + `npm test` grønne.
-- En PR per side (eller en samlet, hvis ryddigere), med klare filendringer.
-- Ikke merge/deploy — det er Adrians.
-
----
-*Kilde til dette oppdraget: `FRA-WHATSON-INVENTAR-PLAN-NY-FLATE-2026-09-24.md` i
-ICM / claude/inbox. Spørsmål → still dem, ikke gjett.*
+*Spørsmål → still dem, ikke gjett. Øktlogger: `mindmatter-brain/Sessions/`.*
