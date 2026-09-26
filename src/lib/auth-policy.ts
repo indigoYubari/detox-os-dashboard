@@ -43,7 +43,10 @@ export function hasScope(scopes: readonly string[], scope: DetoxScope): boolean 
 // ── Offentlige stier ─────────────────────────────────────────────
 // Alt er beskyttet by default. Kun stier i denne listen er anonyme.
 // (Statiske assets ekskluderes allerede av middleware-matcheren.)
-export const PUBLIC_PATHS = ["/login"] as const
+// /glemt-passord og /auth/callback må være åpne: den som har glemt passordet,
+// har ingen sesjon. /oppdater-passord er IKKE åpen; den krever sesjonen som
+// /auth/callback lager.
+export const PUBLIC_PATHS = ["/login", "/glemt-passord", "/auth/callback"] as const
 
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
