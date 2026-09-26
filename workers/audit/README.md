@@ -166,24 +166,66 @@ Google eksplisitt ber om — ikke meldingsteksten.
 
 ## Engangsregistrering av Cloud-prosjektet
 
-`skript/register-gcp.mjs` — **det eneste skrivende kallet i hele datalaget**, og
-bevisst unntatt vakten i `klienter/merchant.py`.
+**Det eneste skrivende kallet i hele datalaget**, bevisst unntatt vakten i
+`klienter/merchant.py`. Merchant API krever at Cloud-prosjektet registreres mot
+Merchant Center-kontoen én gang før noe kan leses.
 
-Merchant API krever at Cloud-prosjektet registreres mot Merchant Center-kontoen
-én gang før noe kan leses. Google krever at kallet gjøres av en bruker med ADMIN.
-Service-kontoen har ikke ADMIN og skal ikke ha det — eneste Admin er `b2b@detox.no`.
+Det avgjørende: `registerGcp` tar **ingen prosjekt-parameter**. Kroppen er bare
+`{"developerEmail": ...}`, og Google utleder prosjektet fra legitimasjonen som
+gjør kallet. Legitimasjonen må derfor høre til **`detox-audit`** (nr. 231263225804)
+— det prosjektet Googles feilmelding ba om. Repoets eksisterende
+`GOOGLE_CLIENT_ID` hører til et annet prosjekt (Gmail, `kontakt@detox.no`) og ville
+registrert feil prosjekt. Ett Cloud-prosjekt kan bare registreres mot én
+Merchant Center-konto, så en feilregistrering er ikke trivielt å angre.
+
+### Hovedvei: service-kontoen
+
+`skript/register_gcp_sa.py`. Service-kontoen ligger i `detox-audit`, så prosjektet
+blir riktig automatisk.
 
 ```bash
 cd workers/audit
+.venv/bin/python skript/register_gcp_sa.py
+```
+
+1. Sett `audit-reader` **midlertidig til Admin** i Merchant Center — Google krever
+   ADMIN for dette kallet.
+2. Kjør skriptet. Det printer nøyaktig hva det sender og **venter på at du skriver
+   `JA`**. Alt annet avbryter, og porten krever store bokstaver.
+3. Vent 5 minutter. Google sier det selv.
+4. Sett `audit-reader` **tilbake til Standard**.
+5. Før endringen inn i `audit_change_log` — dato, hva, hvem.
+
+`developerEmail` er `b2b@detox.no`, ikke service-kontoen: Google krever en vanlig
+Google-konto der.
+
+**Uverifisert:** om Google godtar en *service-konto* som kaller på denne metoden
+står ikke eksplisitt i dokumentasjonen. Svarer den 403, er det svaret — skriptet
+skriver ut hva Google faktisk sa, og forklarer at 403 har to mulige årsaker
+(manglende ADMIN, eller at service-kontoer ikke godtas).
+
+### Reserveveien: OAuth-klient i detox-audit
+
+`skript/register-gcp.mjs` (Node, lokal callback på port 3999). Brukes **bare** hvis
+service-kontoen avvises med 403.
+
+Den krever en OAuth-klient opprettet i prosjektet `detox-audit` — ikke repoets
+eksisterende. Google Cloud Console → Credentials → Create OAuth client ID → Desktop
+app, eller Web med `http://localhost:3999/callback`.
+
+```bash
+export GOOGLE_CLIENT_ID='<fra detox-audit>'
+export GOOGLE_CLIENT_SECRET='<fra detox-audit>'
 node skript/register-gcp.mjs
 ```
 
-- Logg inn med **`b2b@detox.no`** når nettleseren åpner seg.
-- `developerEmail` settes til `b2b@detox.no`.
-- Skriptet printer nøyaktig hva det vil sende, og **venter på at du skriver `JA`**
-  før noe går ut. Alt annet avbryter.
-- Kjøres **én gang, manuelt, av et menneske**. Ikke i jobbene, ikke i en timer.
-- Ett Cloud-prosjekt kan bare registreres mot én Merchant Center-konto.
+Logg inn med `b2b@detox.no`. Samme JA-port.
+
+### Begge kjøres én gang, manuelt, av et menneske
+
+Ikke i jobbene, ikke i en cron, ikke i en timer. `tester/test_register_gcp_sa.py`
+vokter porten: uten et eksplisitt `JA` erstattes `urlopen` med en funksjon som
+kaster, så en port som svikter gir en rød test og ikke en registrering.
 
 Etter kjøring: vent 5 minutter (Google sier det selv), og før det inn i
 `audit_change_log` — dato, hva, hvem.
