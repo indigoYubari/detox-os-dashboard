@@ -19,7 +19,10 @@ import { siteConfig } from "./siteConfig"
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
-  title: siteConfig.name,
+  title: {
+    default: siteConfig.name,
+    template: '%s – detox.OS',
+  },
   description: siteConfig.description,
   keywords: [],
   openGraph: {

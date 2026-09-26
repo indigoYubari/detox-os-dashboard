@@ -2,6 +2,8 @@ export const siteConfig = {
   name: "detox.OS",
   url: "https://os.detox.no",
   description: "Operator-OS for detox.no",
+  getTitle: (pageTitle?: string) =>
+    pageTitle ? `${pageTitle} – detox.OS` : "detox.OS",
   /** Sidene i den ene flaten (src/app/(ny)). Det gamle dashbordet er pensjonert 2026-09-25. */
   baseLinks: {
     home: "/",
