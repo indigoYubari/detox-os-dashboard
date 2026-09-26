@@ -154,7 +154,7 @@ describe("hvor lenge en post har ventet", () => {
 
 describe("utgått ubesvart", () => {
   it("teller bare utgatt innenfor vinduet, per kø", () => {
-    const rader = [
+    const rader: Parameters<typeof utgaattPerKoe>[0] = [
       { koe_id: "annonse-raad", status: "utgatt", oppdatert: "2026-09-24T03:00:00Z" },
       { koe_id: "annonse-raad", status: "utgatt", oppdatert: "2026-09-20T03:00:00Z" },
       { koe_id: "annonse-raad", status: "utgatt", oppdatert: "2026-09-10T03:00:00Z" },
