@@ -32,7 +32,17 @@ service-konto-JWT (RS256 — standardbiblioteket kan ikke det). Alt HTTP går vi
 
 ### Miljøvariabler
 
-Leses fra miljøet (systemd på huben), ellers fra `/root/.env.secrets`.
+Leses i denne rekkefølgen, første treff vinner:
+
+1. **Miljøet** — systemd på huben, eller `export` i skallet.
+2. **`~/.config/detox-audit/supabase.env`** — lokalt (chmod 600).
+3. **`/root/.env.secrets`** — hubens hemmeligheter.
+
+Bare navnene i `TRENGS` leses inn. En env-fil kan inneholde nøkler til andre
+systemer, og de skal ikke inn i prosessen i det hele tatt.
+
+`felles.hemmelig.kilder()` sier hvilke kilder som finnes på maskinen — sti og
+«finnes»/«finnes ikke», aldri en verdi.
 
 | Navn | Hva |
 |---|---|
