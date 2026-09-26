@@ -4,6 +4,21 @@ All notable changes to Detox OS Dashboard should be documented here.
 
 ## Unreleased
 
+### 2026-09-25 — Køen som avgjørelsesflate, og en røyktest mot virkeligheten
+
+Plan: `docs/plan-2026-09-25-virkelighetsbevis-og-koen.md`.
+
+#### Added
+
+- **`/koe`**: køen «Guider som venter på ja» (produkt-kandidater) har navn,
+  forklaring og egne knappetekster. Hver post viser hvor lenge den har ventet,
+  med varsel etter en uke. Annonse-råd sier at rådene byttes ut hver natt, og
+  hvor mange som utgikk ubesvart siste 7 dager. Ny seksjon «Avgjort» med
+  kvittering fra huben (hvem som utførte, når), og varsel når en avgjørelse
+  ikke er utført etter et døgn. Kun lesing; ingen skjemaendring.
+- **Røyktest** (`e2e/roeyktest.spec.ts`, Playwright) med rød sti (uinnlogget)
+  og grønn sti (testbruker), og CI-jobben `røyktest`.
+
 ### 2026-09-25 — Én flate: (main) pensjonert, nye sider på de gamle stiene
 
 Retning A (Adrian 24.09, ja til hele (main) 25.09): den nye lyse flaten er det

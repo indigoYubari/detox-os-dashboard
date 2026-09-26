@@ -3,7 +3,7 @@
 // ikke der ennå, sier svaret det — det er ikke det samme som at ingenting venter.
 
 import { createSupabaseServerClient } from "./auth-server"
-import { POST_COLUMNS, type KoePost } from "./koe-poster"
+import { POST_COLUMNS, utgaattPerKoe, type KoePost } from "./koe-poster"
 
 export type PosterFeil = {
   ok: false
@@ -13,8 +13,21 @@ export type PosterFeil = {
 }
 
 export type PosterResult =
-  | { ok: true; venter: KoePost[]; avgjortIkkeUtfort: KoePost[] }
+  | {
+      ok: true
+      venter: KoePost[]
+      avgjortIkkeUtfort: KoePost[]
+      /** Avgjort og utført av huben, nyeste først — kvitteringene. */
+      avgjortUtfort: KoePost[]
+      /** Poster som ble satt til utgatt siste UTGAATT_DAGER, per kø. */
+      utgaatt: Record<string, number>
+    }
   | PosterFeil
+
+/** Vinduet for «utgikk ubesvart». */
+export const UTGAATT_DAGER = 7
+/** Hvor mange kvitteringer siden viser. */
+export const KVITTERING_ROWS = 20
 
 function klassifiser(melding: string): PosterFeil["code"] {
   if (/does not exist|42P01|could not find the table/i.test(melding)) {
@@ -32,9 +45,10 @@ export const POSTER_ROWS = 200
  * ikke utført ennå — de siste er ærlighet: eieren har sagt ja, huben har ikke
  * gjort det ennå.
  */
-export async function fetchPoster(): Promise<PosterResult> {
+export async function fetchPoster(naa: Date = new Date()): Promise<PosterResult> {
   const supabase = createSupabaseServerClient()
-  const [v, a] = await Promise.all([
+  const utgaattFra = new Date(naa.getTime() - UTGAATT_DAGER * 86_400_000).toISOString()
+  const [v, a, u, g] = await Promise.all([
     supabase
       .from("koe_poster")
       .select(POST_COLUMNS)
@@ -49,13 +63,34 @@ export async function fetchPoster(): Promise<PosterResult> {
       .is("utfort_at", null)
       .order("avgjort_at", { ascending: false })
       .limit(50),
+    supabase
+      .from("koe_poster")
+      .select(POST_COLUMNS)
+      .in("status", ["ja", "nei", "gjort"])
+      .not("utfort_at", "is", null)
+      .order("utfort_at", { ascending: false })
+      .limit(KVITTERING_ROWS),
+    supabase
+      .from("koe_poster")
+      .select("koe_id, status, oppdatert")
+      .eq("status", "utgatt")
+      .gte("oppdatert", utgaattFra)
+      .limit(500),
   ])
   if (v.error) return { ok: false, error: v.error.message, code: klassifiser(v.error.message) }
   if (a.error) return { ok: false, error: a.error.message, code: klassifiser(a.error.message) }
+  if (u.error) return { ok: false, error: u.error.message, code: klassifiser(u.error.message) }
+  if (g.error) return { ok: false, error: g.error.message, code: klassifiser(g.error.message) }
   return {
     ok: true,
     venter: (v.data ?? []) as KoePost[],
     avgjortIkkeUtfort: (a.data ?? []) as KoePost[],
+    avgjortUtfort: (u.data ?? []) as KoePost[],
+    utgaatt: utgaattPerKoe(
+      (g.data ?? []) as Pick<KoePost, "koe_id" | "status" | "oppdatert">[],
+      naa,
+      UTGAATT_DAGER,
+    ),
   }
 }
 

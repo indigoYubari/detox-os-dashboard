@@ -107,3 +107,90 @@ describe("lesLenke", () => {
     expect(lesLenke({ koe_id: "kundeservice", ekstern_id: "3f2a1b4c-0000-4000-8000-000000000000" })).toBeNull()
   })
 })
+
+// ── Alder, utgått og kvittering (plan 25.09, del 2) ─────────────────────────
+
+import {
+  dagerVentet,
+  KOE_HJELP,
+  KOE_NAVN,
+  KOE_REKKEFOLGE,
+  kvittering,
+  utgaattPerKoe,
+  venterLenge,
+  ventetTekst,
+  VENTET_LENGE_DAGER,
+} from "../koe-poster"
+
+const NAA = new Date("2026-09-25T12:00:00Z")
+
+describe("alle køene i basen har navn og forklaring", () => {
+  it("produkt-kandidater er med, med det et ja faktisk gjør", () => {
+    expect(KOE_REKKEFOLGE).toContain("produkt-kandidater")
+    expect(KOE_NAVN["produkt-kandidater"]).toBe("Guider som venter på ja")
+    expect(KOE_HJELP["produkt-kandidater"]).toMatch(/utkast til guiden/)
+    expect(KOE_HJELP["annonse-raad"]).toMatch(/byttes ut hver natt/)
+  })
+  it("grupper bruker navnet, ikke id-en", () => {
+    const g = grupper([post("a", "produkt-kandidater", "anniken", 1)])
+    expect(g[0].navn).toBe("Guider som venter på ja")
+  })
+})
+
+describe("hvor lenge en post har ventet", () => {
+  it("teller hele dager og sier fra etter en uke", () => {
+    const p = post("a", "kim-kort", "indigo", 2, "2026-09-17T10:00:00Z")
+    expect(dagerVentet(p, NAA)).toBe(8)
+    expect(venterLenge(p, NAA)).toBe(true)
+    expect(ventetTekst(p, NAA)).toBe("har ventet 8 dager")
+    expect(VENTET_LENGE_DAGER).toBe(7)
+  })
+  it("under en dag sier ingenting, én dag i entall", () => {
+    expect(ventetTekst(post("b", "kim-kort", "indigo", 2, "2026-09-25T09:00:00Z"), NAA)).toBeNull()
+    expect(ventetTekst(post("c", "kim-kort", "indigo", 2, "2026-09-24T09:00:00Z"), NAA)).toBe("har ventet 1 dag")
+    expect(venterLenge(post("c", "kim-kort", "indigo", 2, "2026-09-24T09:00:00Z"), NAA)).toBe(false)
+  })
+})
+
+describe("utgått ubesvart", () => {
+  it("teller bare utgatt innenfor vinduet, per kø", () => {
+    const rader: Parameters<typeof utgaattPerKoe>[0] = [
+      { koe_id: "annonse-raad", status: "utgatt", oppdatert: "2026-09-24T03:00:00Z" },
+      { koe_id: "annonse-raad", status: "utgatt", oppdatert: "2026-09-20T03:00:00Z" },
+      { koe_id: "annonse-raad", status: "utgatt", oppdatert: "2026-09-10T03:00:00Z" },
+      { koe_id: "annonse-raad", status: "venter", oppdatert: "2026-09-25T03:00:00Z" },
+      { koe_id: "kim-kort", status: "utgatt", oppdatert: "2026-09-25T03:00:00Z" },
+    ]
+    expect(utgaattPerKoe(rader, NAA, 7)).toEqual({ "annonse-raad": 2, "kim-kort": 1 })
+    expect(utgaattPerKoe([], NAA)).toEqual({})
+  })
+})
+
+describe("kvitteringen", () => {
+  const base = post("k", "produkt-kandidater", "anniken", 1, "2026-09-18T10:00:00Z")
+  it("sier hva du sa og at huben utførte det, med hvem", () => {
+    const k = kvittering(
+      { ...base, status: "ja", avgjort_at: "2026-09-22T10:00:00Z", utfort_av: "demandscan-draft", utfort_at: "2026-09-23T04:00:00Z" },
+      NAA,
+    )
+    expect(k.avgjort).toBe("Du sa ja for 3 dager siden.")
+    expect(k.utfort).toBe("Utført etter 18 timer av demandscan-draft.")
+    expect(k.sent).toBe(false)
+  })
+  it("varsler når avgjørelsen er over et døgn gammel og ikke utført", () => {
+    const k = kvittering({ ...base, status: "nei", avgjort_at: "2026-09-23T10:00:00Z", utfort_av: null, utfort_at: null }, NAA)
+    expect(k.avgjort).toBe("Du sa nei for 2 dager siden.")
+    expect(k.utfort).toBe("Ikke utført ennå.")
+    expect(k.sent).toBe(true)
+  })
+  it("varsler ikke før døgnet er gått", () => {
+    const k = kvittering({ ...base, status: "ja", avgjort_at: "2026-09-25T09:00:00Z", utfort_av: null, utfort_at: null }, NAA)
+    expect(k.avgjort).toBe("Du sa ja for 3 timer siden.")
+    expect(k.sent).toBe(false)
+  })
+  it("gjetter ikke når tidspunktet mangler", () => {
+    const k = kvittering({ ...base, status: "gjort", avgjort_at: null, utfort_av: null, utfort_at: null }, NAA)
+    expect(k.avgjort).toBe("Avgjort: gjort, tidspunkt ukjent.")
+    expect(k.sent).toBe(false)
+  })
+})

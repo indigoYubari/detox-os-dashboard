@@ -7,13 +7,16 @@ import {
   grupper,
   KOE_HJELP,
   KOE_NAVN,
+  kvittering,
   lesLenke,
   prioritetTekst,
   UTEN_POSTER,
+  venterLenge,
+  ventetTekst,
   type EierFilter,
   type KoePost,
 } from "@/lib/koe-poster"
-import { fetchPoster, POSTER_IKKE_KOBLET } from "@/lib/koe-poster-server"
+import { fetchPoster, POSTER_IKKE_KOBLET, UTGAATT_DAGER } from "@/lib/koe-poster-server"
 import { fetchKoer, type Koe } from "@/lib/koer-server"
 
 import { Hjelp, Knapper, Seksjon, Stille, Svar } from "../Seksjon"
@@ -41,6 +44,8 @@ function lede(antall: number, filter: EierFilter): string {
 
 function Post({ post, naa }: { post: KoePost; naa: Date }) {
   const lapp = prioritetTekst(post.prioritet)
+  const lenge = venterLenge(post, naa)
+  const ventet = ventetTekst(post, naa)
   return (
     <div className="ny-post">
       <div className="ny-post-topp">
@@ -48,7 +53,11 @@ function Post({ post, naa }: { post: KoePost; naa: Date }) {
           <span className={post.prioritet <= 0 ? "ny-lapp haster" : "ny-lapp"}>{lapp}</span>
         ) : null}
         <span className="ny-lapp">{eierNavn(post.eier)}</span>
-        <span>kom for {varighet(post.opprettet, naa)} siden</span>
+        {lenge && ventet ? (
+          <span className="ny-lapp haster">{ventet}</span>
+        ) : (
+          <span>{ventet ?? `kom for ${varighet(post.opprettet, naa)} siden`}</span>
+        )}
       </div>
       <p className="ny-post-tittel">{post.tittel}</p>
       {post.detalj ? <p className="ny-post-detalj">{post.detalj}</p> : null}
@@ -69,7 +78,7 @@ export default async function KoeSide({
 }) {
   const naa = new Date()
   const filter = eierFilter(searchParams?.eier)
-  const [poster, koer] = await Promise.all([fetchPoster(), fetchKoer()])
+  const [poster, koer] = await Promise.all([fetchPoster(naa), fetchKoer()])
 
   const venter = poster.ok ? forEier(poster.venter, filter) : []
   const grupper_ = grupper(venter)
@@ -80,6 +89,9 @@ export default async function KoeSide({
     ? koer.koer.filter((k) => !medPoster.has(k.id) && k.antall > 0)
     : []
   const ikkeUtfort = poster.ok ? poster.avgjortIkkeUtfort.length : 0
+  const lenge = venter.filter((p) => venterLenge(p, naa)).length
+  const utgaatt = poster.ok ? poster.utgaatt : {}
+  const avgjorte = poster.ok ? [...poster.avgjortIkkeUtfort, ...poster.avgjortUtfort] : []
 
   return (
     <>
@@ -101,10 +113,18 @@ export default async function KoeSide({
             </Link>
           ))}
         </nav>
+        {lenge > 0 ? (
+          <p className="ny-hjelp">
+            <span className="varsel">
+              {lenge} {lenge === 1 ? "har ventet" : "har ventet"} over en uke.
+            </span>{" "}
+            Det som venter lengst står øverst i sin kø.
+          </p>
+        ) : null}
         {ikkeUtfort > 0 ? (
           <p className="ny-hjelp">
             {ikkeUtfort} {ikkeUtfort === 1 ? "avgjørelse" : "avgjørelser"} venter
-            på at huben utfører dem.
+            på at huben utfører dem. Se «Avgjort» nederst.
           </p>
         ) : null}
       </div>
@@ -127,7 +147,20 @@ export default async function KoeSide({
             <strong>{g.poster.length}</strong>{" "}
             {g.poster.length === 1 ? "venter" : "venter"}
           </Svar>
-          {KOE_HJELP[g.koe_id] ? <Hjelp>{KOE_HJELP[g.koe_id]}</Hjelp> : null}
+          {KOE_HJELP[g.koe_id] || utgaatt[g.koe_id] ? (
+            <Hjelp>
+              {KOE_HJELP[g.koe_id] ?? ""}
+              {utgaatt[g.koe_id] ? (
+                <>
+                  {" "}
+                  <span className="varsel">
+                    {utgaatt[g.koe_id]} {utgaatt[g.koe_id] === 1 ? "utgikk" : "utgikk"} ubesvart
+                    siste {UTGAATT_DAGER} dager.
+                  </span>
+                </>
+              ) : null}
+            </Hjelp>
+          ) : null}
           {g.poster.map((p) => (
             <Post key={p.id} post={p} naa={naa} />
           ))}
@@ -159,6 +192,45 @@ export default async function KoeSide({
       {poster.ok && grupper_.length === 0 && koerUtenPoster.length === 0 ? (
         <Seksjon merkelapp="Køen">
           <Svar>Ingenting venter</Svar>
+        </Seksjon>
+      ) : null}
+
+      {poster.ok ? (
+        <Seksjon merkelapp="Avgjort">
+          {avgjorte.length === 0 ? (
+            <Stille>Ingen avgjørelser ennå. Det du sier ja eller nei til, får kvittering her.</Stille>
+          ) : (
+            <>
+              <Svar>
+                <strong>{avgjorte.length}</strong>{" "}
+                {avgjorte.length === 1 ? "avgjørelse" : "avgjørelser"}
+                {ikkeUtfort > 0 ? (
+                  <>
+                    , <span className="varsel">{ikkeUtfort} ikke utført ennå</span>
+                  </>
+                ) : null}
+              </Svar>
+              <Hjelp>
+                Hva huben faktisk gjorde med det dere sa. Kvitteringen leses fra basen, ikke antatt.
+              </Hjelp>
+              {avgjorte.map((p) => {
+                const k = kvittering(p, naa)
+                return (
+                  <div key={p.id} className="ny-post">
+                    <div className="ny-post-topp">
+                      <span className="ny-lapp">{KOE_NAVN[p.koe_id] ?? p.koe_id}</span>
+                      <span className="ny-lapp">{eierNavn(p.eier)}</span>
+                      {k.sent ? <span className="ny-lapp haster">ikke utført</span> : null}
+                    </div>
+                    <p className="ny-post-tittel">{p.tittel}</p>
+                    <p className="ny-post-detalj">
+                      {k.avgjort} {k.sent ? <span className="varsel">{k.utfort}</span> : k.utfort}
+                    </p>
+                  </div>
+                )
+              })}
+            </>
+          )}
         </Seksjon>
       ) : null}
     </>
