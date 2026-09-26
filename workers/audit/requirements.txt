@@ -1,0 +1,4 @@
+# Eneste nye Python-avhengighet i dette repoet, godkjent av Kim 26.09.
+# Trengs kun for å signere service-konto-JWT (RS256). Alt HTTP går via urllib,
+# som scripts/sok-natt.py — derfor ingen requests/urllib3 her.
+google-auth==2.58.1
