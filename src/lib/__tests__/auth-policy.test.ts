@@ -11,9 +11,11 @@ import {
 } from "@/lib/auth-policy"
 
 describe("isPublicPath (eksplisitt allow-list)", () => {
-  it("tillater kun /login anonymt", () => {
+  it("tillater kun innlogging og passordtilbakestilling anonymt", () => {
     expect(isPublicPath("/login")).toBe(true)
     expect(isPublicPath("/login/")).toBe(true)
+    expect(isPublicPath("/glemt-passord")).toBe(true)
+    expect(isPublicPath("/auth/callback")).toBe(true)
   })
   it("beskytter alt annet, inkludert alle API-stier", () => {
     expect(isPublicPath("/")).toBe(false)
@@ -25,6 +27,8 @@ describe("isPublicPath (eksplisitt allow-list)", () => {
   })
   it("lar ikke prefiks-lookalikes slippe gjennom", () => {
     expect(isPublicPath("/loginx")).toBe(false)
+    expect(isPublicPath("/auth/callbackx")).toBe(false)
+    expect(isPublicPath("/auth")).toBe(false)
   })
 })
 

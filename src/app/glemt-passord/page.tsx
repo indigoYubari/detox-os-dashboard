@@ -1,5 +1,6 @@
 "use client"
 
+import { lenkeFeilmelding, tilbakestillingsAdresse } from "@/lib/passord"
 import { supabase } from "@/lib/supabase"
 
 import React from "react"
@@ -10,6 +11,13 @@ export default function ForgotPasswordPage() {
   const [message, setMessage] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
+  // /auth/callback sender hit med ?feil=lenke når e-postlenken ikke virket.
+  // Leses i en effekt (ikke useSearchParams), så siden trenger ingen Suspense.
+  React.useEffect(() => {
+    const feil = new URLSearchParams(window.location.search).get("feil")
+    setError(lenkeFeilmelding(feil))
+  }, [])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -17,7 +25,7 @@ export default function ForgotPasswordPage() {
     setError(null)
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/oppdater-passord`, // Supabase redirect, requires /oppdater-passord route
+      redirectTo: tilbakestillingsAdresse(window.location.origin),
     })
 
     if (error) {
@@ -65,11 +73,11 @@ export default function ForgotPasswordPage() {
             </div>
 
             {message && (
-              <p className="text-sm text-green-600 dark:text-green-400">{message}</p>
+              <p role="status" className="text-sm text-green-600 dark:text-green-400">{message}</p>
             )}
 
             {error && (
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>
             )}
 
             <button

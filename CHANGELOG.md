@@ -4,6 +4,36 @@ All notable changes to Detox OS Dashboard should be documented here.
 
 ## Unreleased
 
+### 2026-09-26 — «Glemt passord» virker
+
+PR #51 la inn innloggingsrettelser og en passordflyt som ikke virket.
+
+#### Added
+
+- **Innlogging** (PR #51): WCAG-rettelser, sidetittel «Logg inn – detox.OS»
+  og lenken «Glemt passord?».
+- **`/auth/callback`**: lenken i e-posten lander her. Koden (PKCE) veksles
+  inn i en sesjon-cookie, og brukeren sendes til `/oppdater-passord`. Utløpt,
+  brukt eller ugyldig lenke sender tilbake til `/glemt-passord` med en
+  forklaring. `next` godtar bare interne stier.
+- Tester for hele kjeden (`passord.test.ts`).
+
+#### Fixed
+
+- `/glemt-passord` og `/auth/callback` er offentlige stier. Før sendte
+  middleware den som hadde glemt passordet, rett tilbake til `/login`.
+- `/oppdater-passord` lette etter `access_token` i adressen, som
+  `@supabase/ssr` aldri sender, og viste derfor alltid «Ugyldig lenke». Siden
+  bruker nå sesjonen fra callback-ruten og krever innlogging som alle andre
+  sider. Nytt passord må ha minst 8 tegn.
+- Meldinger på passordsidene leses opp av skjermlesere (`role="status"`/`"alert"`).
+
+#### Depends on
+
+- Supabase Auth → URL Configuration må tillate
+  `https://os.detox.no/auth/callback**` som redirect URL. Ellers sender
+  Supabase lenken til Site URL i stedet.
+
 ### 2026-09-25 — Køen som avgjørelsesflate, og en røyktest mot virkeligheten
 
 Plan: `docs/plan-2026-09-25-virkelighetsbevis-og-koen.md`.
