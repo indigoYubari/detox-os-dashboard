@@ -15,10 +15,14 @@
  *
  * Mønsteret (lokal callback på port 3999) er hentet fra scripts/google-oauth.mjs.
  *
- * ADVARSEL — UVERIFISERT ENDEPUNKT: sti og API-versjon under er skrevet ut fra
- * spesifikasjonen, ikke bekreftet mot et ekte svar. Skriptet printer derfor
- * nøyaktig hva det vil sende og krever at du skriver JA før noe går ut. Svarer
- * Google 404, er stien eller versjonen feil — ikke gjett, sjekk dokumentasjonen.
+ * VERSJON: v1. v1beta ble stengt 28.02.2026 og svarer ikke lenger.
+ * `developerRegistration` ligger i accounts-sub-API-et, som er v1 (verifisert mot
+ * Googles referanse 26.09.2026).
+ *
+ * ADVARSEL — ENDEPUNKTET ER IKKE PRØVD: stien er bygget fra dokumentasjonen, ikke
+ * bekreftet mot et ekte svar. Skriptet printer derfor nøyaktig hva det vil sende
+ * og krever at du skriver JA før noe går ut. Svarer Google 404, er stien feil —
+ * ikke gjett, sjekk dokumentasjonen.
  *
  * Bruk (fra workers/audit):
  *   node skript/register-gcp.mjs
@@ -37,7 +41,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const KONTO = process.env.MERCHANT_ACCOUNT_ID ?? "5365874444"
 const DEVELOPER_EMAIL = process.env.MERCHANT_DEVELOPER_EMAIL ?? "b2b@detox.no"
 
-const API_VERSJON = "v1beta"
+// v1beta ble stengt 28.02.2026. accounts-sub-API-et er v1.
+const API_VERSJON = "v1"
 const ENDEPUNKT =
   `https://merchantapi.googleapis.com/accounts/${API_VERSJON}` +
   `/accounts/${KONTO}/developerRegistration:registerGcp`

@@ -102,6 +102,58 @@ ikke kan skrive) pluss tillatelseslisten.
 **Merchant gates på GET,** fordi scopet `content` også tillater skriving. Der er
 brukerrollen og vakten det eneste som står mellom koden og en skriving.
 
+## Merchant API v1 — v1beta er stengt
+
+**v1beta ble slått av 28.02.2026.** All Merchant-kode her bruker v1. Vakten
+avviser `/v1beta/` og `/v1alpha/` eksplisitt, så versjonen ikke kan gli tilbake.
+
+### Verifiserte v1-endepunkter
+
+Verifisert mot Googles dokumentasjon 26.09.2026, og stiene er bekreftet av et
+ekte kall (se «Hva som mangler» under).
+
+| Metode | Sti | Maks `pageSize` |
+|---|---|---|
+| `products.list` | `GET /products/v1/accounts/{konto}/products` | 1000 |
+| `products.get` | `GET /products/v1/accounts/{konto}/products/{id}` | — |
+| `dataSources.list` | `GET /datasources/v1/accounts/{konto}/dataSources` | 1000 |
+| `accounts.issues.list` | `GET /accounts/v1/accounts/{konto}/issues` | **100** (std. 50) |
+
+`pageSize` er ikke valgfri pynt: å be om mer enn Googles maks gir 400. Merk at
+varsler har 100 som tak, ikke 1000.
+
+### Vakten: tillatelsesliste, ikke bare svarteliste
+
+Lag 1 er en tillatelsesliste med de fire stiene over. Alt annet avvises —
+inkludert endepunkter Google legger til senere. Lag 2 er svartelista
+(`insert`, `patch`, `update`, `delete`, `create`, `register`, `fetch`) og
+`productInputs`, som er skriveressursen i Merchant API.
+
+Svartelista kjøres på stien **uten** produkt-ID-en. En produkt-ID som inneholder
+«update» er kundedata, ikke en skriving, og skal ikke gi falsk avvisning.
+`GET /products/v1/accounts/1/products/create` er derfor lov: det er `products.get`
+av et produkt som heter «create». Google bruker `:metode` for skriving, så den
+URL-en kan ikke skrive noe — og `products:insert` avvises.
+
+### Rådata lagres før tolkning
+
+`felles/raa.py` skriver hvert rå sidesvar uendret til `raadata/` (gitignorert,
+gzip) **før** noe mappes. Spesifikasjonen §3.3 krever at hele råsvaret bevares,
+fordi feltnavnene kan avvike fra antakelsene. `raa.relativ()` gir en sti som kan
+gjenbrukes som `raw_path` når Storage-bøtta `audit-raw` kommer.
+
+### Feilhåndtering
+
+`felles/nett.py` parser Googles AIP-193-format og bruker `metadata.REASON`, som
+Google eksplisitt ber om — ikke meldingsteksten.
+
+| Status | Type | Handling |
+|---|---|---|
+| 401, 403 | `Nektet` | ikke prøv igjen — nøkkel, scope eller rolle |
+| 404 | `Mangler` | sti eller konto-ID feil |
+| 429, 500, 502, 503, 504 | `Rate` | prøv igjen med økende pause |
+| annet | `KildeFeil` | statuskode og REASON bevart |
+
 ## Engangsregistrering av Cloud-prosjektet
 
 `skript/register-gcp.mjs` — **det eneste skrivende kallet i hele datalaget**, og
@@ -123,18 +175,61 @@ node skript/register-gcp.mjs
 - Kjøres **én gang, manuelt, av et menneske**. Ikke i jobbene, ikke i en timer.
 - Ett Cloud-prosjekt kan bare registreres mot én Merchant Center-konto.
 
-Etter kjøring: før det inn i `audit_change_log` — dato, hva, hvem.
+Etter kjøring: vent 5 minutter (Google sier det selv), og før det inn i
+`audit_change_log` — dato, hva, hvem.
+
+### Hva som mangler før første ekte Merchant-read
+
+Ett skritt. Verifisert ved et ekte read-only-kall 26.09.2026:
+
+```
+GET /datasources/v1/accounts/5365874444/dataSources?pageSize=1
+→ 401 UNAUTHENTICATED
+  REASON: GCP_NOT_REGISTERED
+  "GCP project with id detox-audit and number 231263225804 is not registered
+   with the merchant account. ... then try calling the API again in 5 minutes."
+```
+
+Det svaret er gode nyheter forkledd som en feil:
+
+- **v1-stien er riktig.** Et galt endepunkt ville gitt 404, ikke en
+  registreringsfeil.
+- **Service-konto-nøkkelen og `content`-scopet virker.** Tokenet ble hentet og
+  godtatt.
+- **Det eneste som mangler er registreringen.** Kjør `register-gcp.mjs` én gang.
+
+Merk: Merchant API svarer **401**, ikke 403, når registreringen mangler. Koden
+sjekker derfor `REASON`, ikke statuskoden alene.
+
+### Kontrollprodukt: MegaSporeBiotic
+
+`jobber/merchant_kontroll.py` er klar til å kjøre i det registreringen er gjort.
+Den leser, lagrer rådata, og rapporterer hvor hvert felt fra §3.3 faktisk ligger
+— uten å skrive noe noe sted.
+
+```bash
+.venv/bin/python -m jobber.merchant_kontroll --tilganger   # svarer kallene?
+.venv/bin/python -m jobber.merchant_kontroll               # full feltrapport
+```
+
+Kontrollproduktet er `megasporebiotic-sporebiotika`, samme produkt auditens
+schema-funn ble gjort på. Det kobles via `productAttributes.link`, **ikke** via
+`offer_id` — mønsteret `shopify_NO_<produktId>_<variantId>` er uverifisert, og
+spesifikasjonen §3.6 sier selv at det skal sjekkes mot faktiske data.
+
+Jobben sammenligner også antallet mot de ca. 334 §7 forventer (309 fra
+Shopify-feeden + 25 «Found by Google») og rapporterer avviket som ikke forklart.
 
 ## Uverifisert mot ekte API
 
 Dette er skrevet ut fra spesifikasjonen og **ikke bekreftet mot et ekte svar**:
 
-- **Merchant-stiene** i `klienter/merchant.py` (`/products/v1beta/…`,
-  `/datasources/v1beta/…`, `/accounts/v1beta/…`). Merchant API er aldri kalt fra
-  dette repoet før. Første øyeblikksbilde (sprint 1b) skal lagre hele råsvaret i
-  `attributes`/`raw` og **rapportere avviket, ikke gjette**.
-- **Endepunktet i `register-gcp.mjs`**. Svarer Google 404, er stien eller
-  API-versjonen feil — skriptet sier det, og sier hva du skal gjøre.
+- **Merchant produktfelter.** Stiene er verifiserte (se under), men feltnavnene
+  inne i et produkt er bare lest ut av dokumentasjonstekst — referansesidene
+  rendres med JavaScript og kunne ikke leses. `feltrapport()` sier hvilke som
+  faktisk finnes, og `attributes`-kolonnen holder hele råsvaret.
+- **Endepunktet i `register-gcp.mjs`**. Svarer Google 404, er stien feil —
+  skriptet sier det, og sier hva du skal gjøre.
 - **Shopify API-versjon `2026-07`**. Ingen Shopify-nøkkel var tilgjengelig lokalt,
   så versjonen er ikke prøvd. `klienter/shopify.api_versjon_svarer()` sjekker den
   uten å skrive noe.

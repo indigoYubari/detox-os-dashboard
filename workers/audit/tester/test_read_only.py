@@ -28,32 +28,49 @@ class MerchantAvviserSkriving(unittest.TestCase):
                     merchant._vakt(metode, "https://merchantapi.googleapis.com/x/y")
 
     def test_godtar_get(self):
-        merchant._vakt("GET", "https://merchantapi.googleapis.com/products/v1beta/x/products")
+        merchant._vakt("GET", "https://merchantapi.googleapis.com"
+                              "/products/v1/accounts/5365874444/products")
 
     def test_avviser_skrivende_metodenavn_i_stien(self):
+        # v1-stier, så det er svartelista som avviser dem — ikke versjonssjekken.
         stier = (
-            "/products/v1beta/accounts/1/products:insert",
-            "/products/v1beta/accounts/1/products/create",
-            "/accounts/v1beta/accounts/1:update",
-            "/accounts/v1beta/accounts/1/products/2:delete",
-            "/accounts/v1beta/accounts/1/developerRegistration:register",
-            "/datasources/v1beta/accounts/1/dataSources:patch",
+            "/products/v1/accounts/1/products:insert",
+            "/accounts/v1/accounts/1:update",
+            "/products/v1/accounts/1/products/2:delete",
+            "/accounts/v1/accounts/1/developerRegistration:registerGcp",
+            "/datasources/v1/accounts/1/dataSources:patch",
+            "/datasources/v1/accounts/1/dataSources/2:fetch",
         )
         for sti in stier:
             with self.subTest(sti=sti):
                 with self.assertRaises(merchant.SkrivingAvvist):
                     merchant._vakt("GET", "https://merchantapi.googleapis.com" + sti)
 
+    def test_produkt_id_som_ser_ut_som_et_verb_er_lov(self):
+        # /products/{id} er products.get — en LESING. At id-en heter 'create' eller
+        # 'update' endrer ikke det: Google bruker ':metode' for skriving, så denne
+        # URL-en kan ikke skrive noe. ID-er er kundedata og skal ikke avvises.
+        for pid in ("create", "update", "delete-meg", "online~no~NO~insert"):
+            with self.subTest(pid=pid):
+                merchant._vakt("GET", "https://merchantapi.googleapis.com"
+                                      f"/products/v1/accounts/1/products/{pid}")
+
+    def test_avviser_v1beta_fordi_den_er_stengt(self):
+        # v1beta ble slått av 28.02.2026.
+        with self.assertRaises(merchant.SkrivingAvvist):
+            merchant._vakt("GET", "https://merchantapi.googleapis.com"
+                                  "/products/v1beta/accounts/1/products")
+
     def test_lesekall_naar_ikke_nettet_hvis_vakten_avviser(self):
         # _get bruker vakten. En skrivende sti skal stoppe før http() kalles.
         with self.assertRaises(merchant.SkrivingAvvist):
-            merchant._get({}, "/products/v1beta/accounts/1/products:insert", _http=_nett_forbudt)
+            merchant._get({}, "/products/v1/accounts/1/products:insert", _http=_nett_forbudt)
 
     def test_query_streng_utloser_ikke_falsk_avvisning(self):
-        # Et produktnavn kan inneholde 'update'. Bare stien sjekkes.
+        # Et filter kan inneholde 'update'. Bare stien sjekkes.
         merchant._vakt(
             "GET",
-            "https://merchantapi.googleapis.com/products/v1beta/accounts/1/products"
+            "https://merchantapi.googleapis.com/products/v1/accounts/1/products"
             "?filter=title%3Dupdate",
         )
 
